@@ -257,7 +257,7 @@ def comeback(xv, req, lam0, mirlam):
     # 共回転で流される距離(y方向)
     tau = 2*tau0
     xd = x*math.cos(omgR*tau) - y*math.sin(omgR*tau)
-    yd = y*math.cos(omgR*tau) - x*math.sin(omgR*tau)
+    yd = y*math.cos(omgR*tau) + x*math.sin(omgR*tau)
 
     # 復帰座標
     xv2 = np.array([xd - R0x,
@@ -276,8 +276,8 @@ def ode(xyz, t, veq, aeq, Beq):
     y = xyz[1] + R0y
     z = xyz[2] + R0z
 
-    r2 = x**2 + y**2 + z**2
-    r = math.sqrt(r2)
+    r = math.sqrt(x**2 + y**2 + z**2)
+    R = math.sqrt(x**2 + y**2)
 
     # Parallel
     nakami = 1 - r**5 * math.sin(aeq)**2 * \
@@ -300,9 +300,12 @@ def ode(xyz, t, veq, aeq, Beq):
         (1 + (z/r)**2) * (1 + 3*(z/r)**2)**(-1)
 
     vb = A3 * (1+3*(z/r)**2)**(-1) * (nakami+nakami2)
-    # print(vb)
 
-    v_drift = np.array([0., omgR*x + vb, 0.], dtype=np.float64)
+    # 経度方向単位ベクトル
+    e_phi = np.array([-y, x, 0], dtype=np.float64)/R
+
+    # 経度方向ドリフト速度
+    v_drift = (R*omgR + vb)*e_phi
 
     return v_par + v_drift
 
