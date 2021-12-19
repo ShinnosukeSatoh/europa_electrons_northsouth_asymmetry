@@ -316,7 +316,7 @@ def ode(xyz, t, veq, aeq, Beq):
 @ jit(nopython=True, fastmath=True)
 def rk4(xv, t, dt, tsize, veq, aeq):
     # xvはtrace座標系
-    # aeq [radian]
+    # aeq: RADIANS
 
     # 木星中心の座標
     x = xv[0] + R0x
@@ -367,8 +367,8 @@ def rk4(xv, t, dt, tsize, veq, aeq):
         # ミラーしたら、z座標を少し下にずらす&veqの符号を反転させる
         # veq < 0 ... 北向き
         r = math.sqrt(x**2 + y**2 + z**2)
-        nakami = 1 - r**5 * math.sin(aeq)**2 * \
-            math.sqrt(r**2 + 3 * z**2) * (x**2 + y**2)**(-3)
+        nakami = (x**2 + y**2)**3 - (r**5 * math.sin(aeq)
+                                     ** 2 * math.sqrt(r**2 + 3 * z**2))
         if math.sqrt(nakami) < 0.001 and xv2[2] > 0 and veq < 0:
             print('MIRROR NORTH')
             veq = -veq
@@ -459,8 +459,17 @@ tsize = int(t_len/dt)
 # %% main関数
 def main():
     # 初期座標
-    xv = np.array([0., 0., 0.])
-    # 並列計算の実行
+    r01 = r_grid.reshape(r_grid.size)  # 1次元化
+    phiJ01 = phiJ_grid.reshape(phiJ_grid.size)  # 1次元化
+    z01 = z_grid.reshape(z_grid.size)  # 1次元化
+
+    # 初期座標
+    x01 = r01[0]*math.cos(phiJ01[0]) - R0x
+    y01 = r01[0]*math.sin(phiJ01[0]) - R0y
+    z01 = z01[0]
+    xv = np.array([x01, y01, z01])
+
+    # 1粒子トレース
     dt = abs(1/(1E+5 + v0eq*math.cos(alphaeq))) * 100
     # print(dt)
     start = time.time()
