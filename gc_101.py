@@ -26,7 +26,7 @@ color = ['#6667AB', '#0F4C81', '#5B6770', '#FF6F61', '#645394',
 #
 # %% FORWARD OR BACKWARD
 FORWARD_BACKWARD = 1  # 1=FORWARD, -1=BACKWARD
-
+h = 1
 
 #
 #
@@ -79,13 +79,13 @@ R0x = R0
 R0y = 0
 R0z = 0
 
-# 初期条件座標エリアの範囲(最大と最小)
-x_ip = (L96+1.15*RE)*(math.cos(math.radians(lam)))**(-2) - R0
-x_im = (L96-1.15*RE)*(math.cos(math.radians(lam)))**(-2) - R0
+# 初期条件座標エリアの範囲(木星磁気圏動径方向 最大と最小 phiJ=0で決める)
+r_ip = (L96+1.15*RE)*(math.cos(math.radians(lam)))**(-2) - R0x
+r_im = (L96-1.15*RE)*(math.cos(math.radians(lam)))**(-2) - R0x
 
 # Europaのtrace座標系における位置
-eurx = L96*math.cos(math.radians(lam)) - R0
-eury = 1.6*RJ  # ============================== ここ変えてね ==============================
+eurx = L96*math.cos(math.radians(lam)) - R0x
+eury = 0  # ============================== ここ変えてね ==============================
 eurz = L96*math.sin(math.radians(lam))
 
 # 遠方しきい値(z方向) 磁気緯度で設定
@@ -116,56 +116,59 @@ v0args = list(zip(
 
 #
 #
-# %% 初期座標ビンの設定ファンクション
-def init_points(xmin, xmax, ymin, ymax, zmin, zmax, nx, ny, nz):
-    xinit_array = np.linspace(xmin, xmax, nx+1)
-    yinit_array = np.linspace(ymin, ymax, ny+1)
-    zinit_array = np.array([0])
+# %% 初期座標ビンの設定ファンクション(磁気赤道面の2次元極座標 + z軸)
+@jit(nopython=True, fastmath=True)
+def init_points(rmin, rmax, phiJmin, phiJmax, zmin, zmax, nr, nphiJ, nz):
+    r_bins = np.linspace(rmin, rmax, nr)
+    phiJ_bins = np.radians(np.linspace(
+        phiJmin, phiJmax, nphiJ))    # DEGREES TO RADIANS
+    z_bins = np.array([0])
 
-    # ビンの中点を計算する
-    x_mae = xinit_array[:-1]
-    x_ushiro = xinit_array[1:]
-    x_center = (x_ushiro + x_mae)/2  # ビンの中点
+    # 動径方向の中点
+    r_bins = np.linspace(rmin, rmax, 10)
+    r_mae = r_bins[:-1]
+    r_ushiro = r_bins[1:]
+    r_middle = (r_ushiro + r_mae)*0.5   # r 中点
 
-    y_mae = yinit_array[:-1]
-    y_ushiro = yinit_array[1:]
-    y_center = (y_ushiro + y_mae)/2  # ビンの中点
+    # 経度方向の中点
+    phiJ_mae = phiJ_bins[:-1]
+    phiJ_ushiro = phiJ_bins[1:]
+    phiJ_middle = (phiJ_ushiro + phiJ_mae)*0.5  # phiJ 中点
 
-    xinit_grid, yinit_grid, zinit_grid = np.meshgrid(
-        x_center, y_center, zinit_array)
+    # 3次元グリッドの作成
+    r_grid, phiJ_grid, z_grid = np.meshgrid(r_middle, phiJ_middle, z_bins)
 
-    return xinit_grid, yinit_grid, zinit_grid
+    # ビンの中でシフトさせる距離(r-phiJ平面)
+    d_r = 0.5*np.abs(r_grid[0, 1, 0] - r_grid[0, 0, 0])
+    d_phiJ = 0.5*np.abs(phiJ_grid[1, 0, 0] - phiJ_grid[0, 0, 0])
+
+    return r_grid, phiJ_grid, z_grid, d_r, d_phiJ
 
 
 # %% 初期座標ビンの設定(グローバル)
-# x: antijovian, y: corotation, z: north
-nx, ny, nz = 20, 100, 1     # x, y, zのビン数
-xinit_grid, yinit_grid, zinit_grid = init_points(x_im, x_ip,
-                                                 0, eury-RE,
-                                                 -1, 1,
-                                                 nx,
-                                                 ny,
-                                                 nz)
-
-# ビンの間隔(xy平面)
-deltax = np.abs(xinit_grid[0, 1, 0]-xinit_grid[0, 0, 0])
-deltay = np.abs(yinit_grid[1, 0, 0]-yinit_grid[0, 0, 0])
-deltax = 0.5*deltax
-deltay = 0.5*deltay
+nr, nphiJ, nz = 20, 100, 1     # x, y, zのビン数
+r_grid, phiJ_grid, z_grid, d_r, d_phiJ = init_points(r_im, r_ip,
+                                                     # phiJの範囲(DEGREES)
+                                                     -5.0, -1.0,
+                                                     -1, 1,
+                                                     nr, nphiJ, nz)
 
 
 #
 #
 # %% 初期座標をシフトさせる
 @jit('Tuple((f8,f8))(f8,f8)', nopython=True, fastmath=True)
-def xyshift(x0, y0):
+def init_shift(r0, phiJ0):
     # ビンの中心からのずれ量 shapeは(ny,nx)
-    xshift = deltax*(2*np.random.rand() - 1)
-    yshift = deltay*(2*np.random.rand() - 1)
+    r_shift = d_r*(2*np.random.rand() - 1)
+    phiJ_shift = d_phiJ*(2*np.random.rand() - 1)
 
     # ビンの中心からずらした新しい座標
-    x0 += xshift
-    y0 += yshift
+    r0 += r_shift
+    phiJ0 += phiJ_shift
+
+    x0 = r0*np.cos(phiJ0)
+    y0 = r0*np.sin(phiJ0)
 
     return x0, y0
 
@@ -252,14 +255,11 @@ def comeback(xv, req, lam0, mirlam):
         tau0 += (req/v0eq)*0.5*(tau1+tau2)*dellam
 
     # 共回転で流される距離(y方向)
-    # R = math.sqrt(x**2 + y**2)
-    vcor = x*omgR
-    cd = vcor*2*tau0
-    xd = x
-    yd = y + cd
-    # yd = y + tb * vcor
+    tau = 2*tau0
+    xd = x*math.cos(omgR*tau) - y*math.sin(omgR*tau)
+    yd = y*math.cos(omgR*tau) - x*math.sin(omgR*tau)
 
-    # 復帰座標(z方向の速度成分をinvert)
+    # 復帰座標
     xv2 = np.array([xd - R0x,
                     yd - R0y,
                     xv[2]], dtype=np.float64)
@@ -418,7 +418,7 @@ class RK4:
 #
 #
 # %% トレースを行うfunction
-def calc(x0, y0, z0):
+def calc(r0, phiJ0, z0):
     start0 = time.time()
     # 終点座標(x,y,z)と磁気赤道面ピッチ角(aeq)を格納する配列
     result = np.zeros((len(v0args), 4))
@@ -427,7 +427,7 @@ def calc(x0, y0, z0):
         dt = abs(1/(veq*math.cos(aeq))) * 100
 
         # 初期座標をシフトさせる
-        x0, y0 = xyshift(x0, y0)
+        x0, y0 = init_shift(r0, phiJ0)
         xv = np.array([
             x0,
             y0,
