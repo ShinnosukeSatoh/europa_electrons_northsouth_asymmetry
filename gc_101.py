@@ -26,13 +26,19 @@ color = ['#6667AB', '#0F4C81', '#5B6770', '#FF6F61', '#645394',
 #
 # %% FORWARD OR BACKWARD
 FORWARD_BACKWARD = 1  # 1=FORWARD, -1=BACKWARD
-h = 1
+
+
+#
+#
+# %% 座標保存の間隔(hステップに1回保存する)
+h = int(200)
+
 
 #
 #
 # %% SETTINGS FOR THE NEXT EXECUTION
 energy = float(20)  # eV
-savename = 'go_20ev_aeq77_20211125_3.txt'
+savename = 'go_20ev_aeq77_20211219_1.txt'
 alphaeq = np.radians(77)   # PITCH ANGLE
 
 
@@ -477,13 +483,11 @@ def main():
     print('%.3f seconds' % (time.time()-start))
 
     # SAVE
-    """
     np.savetxt(
         '/Users/shin/Documents/Research/Europa/Codes/gyrocenter/gyrocenter_1/' +
         str(savename), result
     )
     print('DONE')
-    """
 
     return 0
 
