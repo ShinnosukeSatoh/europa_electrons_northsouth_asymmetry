@@ -37,7 +37,7 @@ h = int(500)
 #
 #
 # %% SETTINGS FOR THE NEXT EXECUTION
-energy = float(20)  # eV
+energy = float(500)  # eV
 savename = 'go_20ev_aeq77_20211219_1.txt'
 alphaeq = np.radians(77)   # PITCH ANGLE
 
@@ -86,8 +86,8 @@ R0y = 0
 R0z = 0
 
 # 初期条件座標エリアの範囲(木星磁気圏動径方向 最大と最小 phiJ=0で決める)
-r_ip = (L96+1.15*RE)*(math.cos(math.radians(lam)))**(-2) - R0x
-r_im = (L96-1.15*RE)*(math.cos(math.radians(lam)))**(-2) - R0x
+r_ip = (L96+1.15*RE)*(math.cos(math.radians(lam)))**(-2)
+r_im = (L96-1.15*RE)*(math.cos(math.radians(lam)))**(-2)
 
 # Europaのtrace座標系における位置
 eurx = L96*math.cos(math.radians(lam)) - R0x
@@ -123,7 +123,6 @@ v0args = list(zip(
 #
 #
 # %% 初期座標ビンの設定ファンクション(磁気赤道面の2次元極座標 + z軸)
-@jit(nopython=True, fastmath=True)
 def init_points(rmin, rmax, phiJmin, phiJmax, zmin, zmax, nr, nphiJ, nz):
     r_bins = np.linspace(rmin, rmax, nr)
     phiJ_bins = np.radians(np.linspace(
@@ -155,7 +154,7 @@ def init_points(rmin, rmax, phiJmin, phiJmax, zmin, zmax, nr, nphiJ, nz):
 nr, nphiJ, nz = 20, 100, 1     # x, y, zのビン数
 r_grid, phiJ_grid, z_grid, d_r, d_phiJ = init_points(r_im, r_ip,
                                                      # phiJの範囲(DEGREES)
-                                                     -5.0, -1.0,
+                                                     -45.0, -1.0,
                                                      -1, 1,
                                                      nr, nphiJ, nz)
 
@@ -173,8 +172,8 @@ def init_shift(r0, phiJ0):
     r0 += r_shift
     phiJ0 += phiJ_shift
 
-    x0 = r0*np.cos(phiJ0)
-    y0 = r0*np.sin(phiJ0)
+    x0 = r0*np.cos(phiJ0) - R0x
+    y0 = r0*np.sin(phiJ0) - R0y
 
     return x0, y0
 
@@ -226,7 +225,7 @@ def mirror(alpha):
     elif (la > 1.5*np.pi) and (la < 2*np.pi):
         la = 2*np.pi - la
 
-    print(np.degrees(la))
+    print('mirror point: ', np.degrees(la))
 
     return la
 
@@ -373,8 +372,8 @@ def rk4(xv, t, dt, tsize, veq, aeq):
         # ミラーしたら、z座標を少し下にずらす&veqの符号を反転させる
         # veq < 0 ... 北向き
         r = math.sqrt(x**2 + y**2 + z**2)
-        nakami = (x**2 + y**2)**3 - (r**5 * math.sin(aeq)
-                                     ** 2 * math.sqrt(r**2 + 3 * z**2))
+        nakami = 1 - r**5 * math.sin(aeq)**2 * \
+            math.sqrt(r**2 + 3 * z**2) * (x**2 + y**2)**(-3)
         if math.sqrt(nakami) < 0.001 and xv2[2] > 0 and veq < 0:
             print('MIRROR NORTH')
             veq = -veq
@@ -455,7 +454,7 @@ def calc(r0, phiJ0, z0):
 # %% 時間設定
 t = 0
 dt = float(5E-6)  # 時間刻みはEuropaの近くまで来たらもっと細かくして、衝突判定の精度を上げよう
-t_len = 1000
+t_len = 2000
 # t = np.arange(0, 60, dt)     # np.arange(0, 60, dt)
 tsize = int(t_len/dt)
 
@@ -474,6 +473,7 @@ def main():
     y01 = r01[0]*math.sin(phiJ01[0]) - R0y
     z01 = z01[0]
     xv = np.array([x01, y01, z01])
+    print(xv)
 
     # 1粒子トレース
     dt = abs(1/(1E+5 + v0eq*math.cos(alphaeq))) * 100
