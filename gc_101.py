@@ -31,7 +31,7 @@ FORWARD_BACKWARD = 1  # 1=FORWARD, -1=BACKWARD
 #
 #
 # %% 座標保存の間隔(hステップに1回保存する)
-h = int(200)
+h = int(500)
 
 
 #
@@ -408,9 +408,9 @@ def rk4(xv, t, dt, tsize, veq, aeq):
             veq = -veq  # 磁力線に平行な速度成分 向き反転
 
         # 磁気赤道面に戻ってきたら終了する
-        if xv2[2] < - 2:
-            print('BREAK')
-            break
+        # if xv2[2] < - 2:
+        #     print('BREAK')
+        #     break
 
     return trace[0:kk, :]
 
