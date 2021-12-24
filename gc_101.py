@@ -31,7 +31,7 @@ FORWARD_BACKWARD = 1  # 1=FORWARD, -1=BACKWARD
 #
 #
 # %% 座標保存の間隔(hステップに1回保存する)
-h = int(500)
+h = int(2000)
 
 
 #
@@ -39,7 +39,7 @@ h = int(500)
 # %% SETTINGS FOR THE NEXT EXECUTION
 energy = 50  # eV
 savename = 'go_500ev_aeq77_20211224_1.txt'
-alphaeq = np.radians(84.0)   # PITCH ANGLE
+alphaeq = np.radians(60.0)   # PITCH ANGLE
 
 
 #
@@ -62,6 +62,8 @@ omgJ = FORWARD_BACKWARD*float(1.74E-4)    # 木星の自転角速度 単位: rad
 omgE = FORWARD_BACKWARD*float(2.05E-5)    # Europaの公転角速度 単位: rad/s
 omgR = omgJ-omgE                          # 木星のEuropaに対する相対的な自転角速度 単位: rad/s
 omgRvec = np.array([0., 0., omgR], dtype=np.float64)        # ベクトル化 単位: rad/s
+omgRvec = omgR*np.array([-math.sin(math.degrees(10)),
+                         0., math.cos(math.degrees(10))], dtype=np.float64)
 
 
 #
@@ -155,7 +157,7 @@ def init_points(rmin, rmax, phiJmin, phiJmax, zmin, zmax, nr, nphiJ, nz):
 nr, nphiJ, nz = 20, 100, 1     # x, y, zのビン数
 r_grid, phiJ_grid, z_grid, d_r, d_phiJ = init_points(r_im, r_ip,
                                                      # phiJの範囲(DEGREES)
-                                                     -45.0, -1.0,
+                                                     -10.0, -1.0,
                                                      -1, 1,
                                                      nr, nphiJ, nz)
 
@@ -202,12 +204,8 @@ def Bfield(Rvec):
 @jit('f8(f8[:])', nopython=True, fastmath=True)
 def Babs(Rvec):
     # x, y, zは木星からの距離
-    x = Rvec[0]
-    y = Rvec[1]
-    z = Rvec[2]
-
-    r = math.sqrt(x**2 + y**2 + z**2)
-    B = A2 * (math.sqrt(1+3*(z/r))**2) * r**(-3)
+    Bvec = Bfield(Rvec)
+    B = math.sqrt(Bvec[0]**2 + Bvec[1]**2 + Bvec[2]**2)
 
     return B
 
@@ -368,10 +366,9 @@ def ode2(RV, t, mu0):
     # Magnetic Field
     B = Babs(Rvec)       # 磁場強度
     Bvec = Bfield(Rvec)  # 磁場ベクトル
-    bvec = Bvec/B        # 磁力線方向の単位ベクトル
+    # bvec = Bvec/B        # 磁力線方向の単位ベクトル
     # print('bvec: ', bvec)
 
-    dRvec = np.array([10., 10., 10.])    # 回転中心の微小変位(!!!)
     dX = 2.
     dY = 2.
     dZ = 2.
@@ -454,6 +451,42 @@ def rk4(RV, t, dt, tsize, veq, aeq):
     print('mu0: ', mu0)
     RV[3] = 0
 
+    """
+    # Magnetic Field
+    Rvec[2] = Rvec[2] + 200000
+    print(Rvec)
+    B = Babs(Rvec)       # 磁場強度
+    Bvec = Bfield(Rvec)  # 磁場ベクトル
+    bvec = Bvec/B        # 磁力線方向の単位ベクトル
+    dX = 2.
+    dY = 2.
+    dZ = 2.
+    dBdR = np.array([
+        (Babs(Rvec+np.array([dX, 0., 0.])) - B)/dX,
+        (Babs(Rvec+np.array([0., dY, 0.])) - B)/dY,
+        (Babs(Rvec+np.array([0., 0., dZ])) - B)/dZ,
+    ])
+    print('bvec: ', bvec)
+    print('B =', B, ', dBdR dot bvec =', np.dot(dBdR, bvec))
+
+    # Magnetic Field
+    Rvec[2] = Rvec[2] - 400000
+    print(Rvec)
+    B = Babs(Rvec)       # 磁場強度
+    Bvec = Bfield(Rvec)  # 磁場ベクトル
+    bvec = Bvec/B        # 磁力線方向の単位ベクトル
+    dX = 2.
+    dY = 2.
+    dZ = 2.
+    dBdR = np.array([
+        (Babs(Rvec+np.array([dX, 0., 0.])) - B)/dX,
+        (Babs(Rvec+np.array([0., dY, 0.])) - B)/dY,
+        (Babs(Rvec+np.array([0., 0., dZ])) - B)/dZ,
+    ])
+    print('bvec: ', bvec)
+    print('B =', B, ', dBdR dot bvec =', np.dot(dBdR, bvec))
+    """
+
     # distance from Jupiter
     req = math.sqrt(Rvec[0]**2 + Rvec[1]**2 + Rvec[2]**2)
 
@@ -511,11 +544,12 @@ def rk4(RV, t, dt, tsize, veq, aeq):
 
         if k % h == 0:
             # 1ステップでどれくらい進んだか
-            D = np.linalg.norm(RV2[0:3]-RV[0:3])
+            # D = np.linalg.norm(RV2[0:3]-RV[0:3])
             # print(k*dt, D)
             trace[kk, :] = RV2[0:3]
             kk += 1
 
+        """
         # Magnetic Field
         B = Babs(Rvec)       # 磁場強度
         Bvec = Bfield(Rvec)  # 磁場ベクトル
@@ -524,7 +558,6 @@ def rk4(RV, t, dt, tsize, veq, aeq):
         # 速度ベクトル
         Vvec = RV2[3:6]
         # if abs(np.dot(Vvec, bvec)) < 50:
-        """
         if RV2[2] < -50:
             dX = 2.
             dY = 2.
@@ -600,8 +633,8 @@ def calc(r0, phiJ0, z0):
 #
 # %% 時間設定
 t = 0
-dt = float(1E-5)  # 時間刻みはEuropaの近くまで来たらもっと細かくして、衝突判定の精度を上げよう
-t_len = 300
+dt = float(2E-5)  # 時間刻みはEuropaの近くまで来たらもっと細かくして、衝突判定の精度を上げよう
+t_len = 1200
 # t = np.arange(0, 60, dt)     # np.arange(0, 60, dt)
 tsize = int(t_len/dt)
 
