@@ -60,17 +60,18 @@ mu = float(1.26E-6)     # 真空中透磁率  単位: N A^-2 = kg m s^-2 A^-2
 Mdip = float(1.6E+27)   # Jupiterのダイポールモーメント 単位: A m^2
 omgJ = FORWARD_BACKWARD*float(1.74E-4)    # 木星の自転角速度 単位: rad/s
 omgE = FORWARD_BACKWARD*float(2.05E-5)    # Europaの公転角速度 単位: rad/s
-omgR = omgJ-omgE        # 木星のEuropaに対する相対的な自転角速度 単位: rad/s
+omgR = omgJ-omgE                          # 木星のEuropaに対する相対的な自転角速度 単位: rad/s
+omgRvec = np.array([0., 0., omgR])        # ベクトル化 単位: rad/s
 
 
 #
 #
 # %% 途中計算でよく出てくる定数の比
-# A1 = float(e/me)             # 運動方程式内の定数
-# A2 = float(mu*Mdip/4/3.14)  # ダイポール磁場表式内の定数
-A1 = float(-1.7582E+11)    # 運動方程式内の定数
-A2 = FORWARD_BACKWARD*1.60432E+20            # ダイポール磁場表式内の定数
-A3 = 4*3.1415*me/(mu*Mdip*e)    # ドリフト速度の係数
+# A1 = float(e/me)                  # 運動方程式内の定数
+# A2 = float(mu*Mdip/4/3.14)        # ダイポール磁場表式内の定数
+A1 = float(-1.7582E+11)             # 運動方程式内の定数
+A2 = FORWARD_BACKWARD*1.60432E+20   # ダイポール磁場表式内の定数
+A3 = 4*3.1415*me/(mu*Mdip*e)        # ドリフト速度の係数
 
 
 #
@@ -182,25 +183,44 @@ def init_shift(r0, phiJ0):
 #
 # %% 磁場
 @jit('Tuple((f8,f8,f8))(f8,f8,f8)', nopython=True, fastmath=True)
-def Bfield(x, y, z):
+def Bfield(Rvec):
     # x, y, zは木星からの距離
+    x = Rvec[0]
+    y = Rvec[1]
+    z = Rvec[2]
+
+    # distance
     R2 = x**2 + y**2
     r_5 = math.sqrt(R2 + z**2)**(-5)
 
-    Bx = A2*(3*z*x*r_5)
-    By = A2*(3*z*y*r_5)
-    Bz = A2*(2*z**2 - R2)*r_5
+    # Magnetic field
+    Bvec = A2*r_5*np.array([3*z*x, 3*z*y, 2*z**2 - R2])
 
-    return Bx, By, Bz
+    return Bvec
 
 
 @jit('f8(f8,f8,f8)', nopython=True, fastmath=True)
-def Babs(x, y, z):
+def Babs(Rvec):
     # x, y, zは木星からの距離
+    x = Rvec[0]
+    y = Rvec[1]
+    z = Rvec[2]
+
     r = math.sqrt(x**2 + y**2 + z**2)
     B = A2 * (math.sqrt(1+3*(z/r))**2) * r**(-3)
 
     return B
+
+
+#
+#
+# %% 共回転電場
+def Efield(Rvec):
+    # x, y, zは木星からの距離
+    Bvec = Bfield(Rvec)
+    Evec = np.dot(omgRvec, Bvec)*Rvec - np.dot(Rvec, Bvec)*omgRvec
+
+    return Evec
 
 
 # %% Newton法でミラーポイントの磁気緯度を調べる
@@ -313,6 +333,58 @@ def ode(xyz, t, veq, aeq, Beq):
     v_drift = (R*omgR + vb)*e_phi
 
     return v_par + v_drift
+
+
+#
+#
+# %% 回転中心位置ベクトルRについての運動方程式(eq.8 on Northrop and Birmingham, 1982)
+@jit('f8[:](f8[:],f8,f8,f8,f8)', nopython=True, fastmath=True)
+def ode2(RV, t, veq, aeq, Beq):
+    # RV.shape >>> (6,)
+    # 座標系 = Europa中心の静止系
+    # RV[0] ... x of Guiding Center
+    # RV[1] ... y
+    # RV[2] ... z
+    # RV[3] ... vx of Guiding Center
+    # RV[4] ... vy
+    # RV[5] ... vz
+
+    Rvec = np.array([RV[0] + R0x,
+                     RV[1] + R0y,
+                     RV[2] + R0z])
+    Vvec = RV[3:6]
+
+    # Magnetic Field
+    B = Babs(Rvec)       # 磁場強度
+    Bvec = Bfield(Rvec)  # 磁場ベクトル
+    bvec = Bvec/B        # 磁力線方向の単位ベクトル
+
+    dRvec = np.array(1., 1., 1.)    # 回転中心の微小変位
+    dB = Babs(Rvec+dRvec) - B       # 磁場強度の微小変位
+
+    # Gyro radius
+    V = math.sqrt(Vvec[0]**2 + Vvec[1]**2 + Vvec[2]**2)
+    Vparallel = Vvec[0]*bvec[0] + Vvec[1]*bvec[1] + Vvec[1]*bvec[1]
+    Vperp = math.sqrt(V**2 - Vparallel**2)
+
+    # ローレンツ力
+    omgRcrossR = np.array([
+        omgRvec[1]*Rvec[2] - omgRvec[2]*Rvec[1],
+        omgRvec[2]*Rvec[0] - omgRvec[0]*Rvec[2],
+        omgRvec[0]*Rvec[1] - omgRvec[1]*Rvec[0]
+    ])
+    L1vec = Vvec - omgRcrossR
+    L1crossB = np.array([
+        L1vec[1]*Bvec[2] - L1vec[2]*Bvec[1],
+        L1vec[2]*Bvec[0] - L1vec[0]*Bvec[2],
+        L1vec[0]*Bvec[1] - L1vec[1]*Bvec[0]
+    ])
+
+    R2dotvec = (e/me)*L1crossB - ((Vperp**2)/(2*B))*(dB/dRvec)
+
+    RVnew = np.stack([Vvec, R2dotvec], 1)   # concateneteでいいんじゃない?
+
+    return 0
 
 
 #
