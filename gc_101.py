@@ -254,11 +254,12 @@ def mirror(alpha):
 #
 # %% シミュレーションボックスの外に出た粒子の復帰座標を計算
 @jit('f8[:](f8[:],f8,f8,f8)', nopython=True, fastmath=True)
-def comeback(xv, req, lam0, mirlam):
+def comeback(RV, req, lam0, mirlam):
+    # RV: Europa原点座標系
     # lam0: スタートの磁気緯度
     # mirlam: mirror pointの磁気緯度
-    x = xv[0] + R0x
-    y = xv[1] + R0y
+    x = RV[0] + R0x
+    y = RV[1] + R0y
 
     # 積分の刻み
     dellam = 1E-5
@@ -285,11 +286,16 @@ def comeback(xv, req, lam0, mirlam):
     yd = y*math.cos(omgR*tau) + x*math.sin(omgR*tau)
 
     # 復帰座標
-    xv2 = np.array([xd - R0x,
-                    yd - R0y,
-                    xv[2]], dtype=np.float64)
+    Rvec2 = np.array([xd - R0x,
+                      yd - R0y,
+                      RV[2]], dtype=np.float64)
 
-    return xv2
+    # 復帰座標における速度ベクトル
+    # vzだけ反転させるのは誤り
+    # x,y成分だけ回転させて、z成分は反転?
+    # → ダイポール軸と木星自転軸が平行でない場合に適切ではない。
+
+    return np.concatenate([Rvec2, RV[3:6]])
 
 
 #
@@ -339,7 +345,7 @@ def ode(xyz, t, veq, aeq, Beq):
 #
 # %% 回転中心位置ベクトルRについての運動方程式(eq.8 on Northrop and Birmingham, 1982)
 @jit('f8[:](f8[:],f8,f8,f8,f8)', nopython=True, fastmath=True)
-def ode2(RV, t, veq, aeq, Beq):
+def ode2(RV, t):
     # RV.shape >>> (6,)
     # 座標系 = Europa中心の静止系
     # RV[0] ... x of Guiding Center
@@ -349,9 +355,12 @@ def ode2(RV, t, veq, aeq, Beq):
     # RV[4] ... vy
     # RV[5] ... vz
 
+    # 木星原点の位置ベクトルに変換
     Rvec = np.array([RV[0] + R0x,
                      RV[1] + R0y,
                      RV[2] + R0z])
+
+    # 速度ベクトル
     Vvec = RV[3:6]
 
     # Magnetic Field
@@ -359,13 +368,13 @@ def ode2(RV, t, veq, aeq, Beq):
     Bvec = Bfield(Rvec)  # 磁場ベクトル
     bvec = Bvec/B        # 磁力線方向の単位ベクトル
 
-    dRvec = np.array(1., 1., 1.)    # 回転中心の微小変位
+    dRvec = np.array(1., 1., 1.)    # 回転中心の微小変位(!!!)
     dB = Babs(Rvec+dRvec) - B       # 磁場強度の微小変位
 
-    # Gyro radius
+    # Parallel velocity
     V = math.sqrt(Vvec[0]**2 + Vvec[1]**2 + Vvec[2]**2)
     Vparallel = Vvec[0]*bvec[0] + Vvec[1]*bvec[1] + Vvec[1]*bvec[1]
-    Vperp = math.sqrt(V**2 - Vparallel**2)
+    Vperp = math.sqrt(V**2 - Vparallel**2)  # !!! 和と差の積にするか検討
 
     # ローレンツ力
     omgRcrossR = np.array([
@@ -382,39 +391,37 @@ def ode2(RV, t, veq, aeq, Beq):
 
     R2dotvec = (e/me)*L1crossB - ((Vperp**2)/(2*B))*(dB/dRvec)
 
-    RVnew = np.stack([Vvec, R2dotvec], 1)   # concateneteでいいんじゃない?
+    # RVnew = np.stack([Vvec, R2dotvec], 1)   # concatenateでいいんじゃない?
+    RVnew = np.concatenate([Vvec, R2dotvec])
 
-    return 0
+    return RVnew
 
 
 #
 #
 # %% 4次ルンゲクッタ.. functionの定義
 @ jit(nopython=True, fastmath=True)
-def rk4(xv, t, dt, tsize, veq, aeq):
-    # xvはtrace座標系
+def rk4(RV, t, dt, tsize, veq, aeq):
+    # RVはtrace座標系
     # aeq: RADIANS
 
     # 木星中心の座標
-    x = xv[0] + R0x
-    y = xv[1] + R0y
-    z = xv[2] + R0z
+    RV = np.array([0., 0., 0.])
 
-    # 磁気赤道面での磁場
-    Beq = Babs(x, y, z)
+    # 木星原点の位置ベクトルに変換
+    Rvec = np.array([RV[0] + R0x,
+                     RV[1] + R0y,
+                     RV[2] + R0z])
 
     # distance from Jupiter
-    req = math.sqrt(x**2 + y**2 + z**2)
+    req = math.sqrt(Rvec[0]**2 + Rvec[1]**2 + Rvec[2]**2)
 
     # mirror pointの磁気緯度(rad)
     # 磁気赤道面ピッチ角が90度より大きいとき
     if aeq > math.pi/2:
-        # 最初南向き...veqは正
         mirlam = mirror(math.pi - aeq)
     else:
-        # 最初北向き...veqは負
         mirlam = mirror(aeq)
-        veq = -veq
 
     # トレース開始
     dt2 = dt*0.5
@@ -426,18 +433,19 @@ def rk4(xv, t, dt, tsize, veq, aeq):
     # ルンゲクッタ
     # print('RK4 START')
     for k in range(tsize-1):
-        F1 = ode(xv, t, veq, aeq, Beq)
-        F2 = ode(xv+dt2*F1, t+dt2, veq, aeq, Beq)
-        F3 = ode(xv+dt2*F2, t+dt2, veq, aeq, Beq)
-        F4 = ode(xv+dt*F3, t+dt, veq, aeq, Beq)
-        xv2 = xv + dt*(F1 + 2*F2 + 2*F3 + F4)/6
+        F1 = ode2(RV, t)
+        F2 = ode2(RV+dt2*F1, t+dt2)
+        F3 = ode2(RV+dt2*F2, t+dt2)
+        F4 = ode2(RV+dt*F3, t+dt)
+        RV2 = RV + dt*(F1 + 2*F2 + 2*F3 + F4)/6
         # xvの中身... [0]-[2]: gyro中心の座標(trace座標系)
 
-        # 木星中心の座標
-        x = xv2[0] + R0x
-        y = xv2[1] + R0y
-        z = xv2[2] + R0z
+        # 木星原点の位置ベクトルに変換
+        Rvec = np.array([RV2[0] + R0x,
+                        RV2[1] + R0y,
+                        RV2[2] + R0z])
 
+        """
         # 北側のミラーポイント
         # ミラーポイントがz_pしきい値よりも下にある場合
         # nakami がほぼゼロになる = ミラー
@@ -460,23 +468,23 @@ def rk4(xv, t, dt, tsize, veq, aeq):
             print('MIRROR SOUTH')
             veq = -veq
             xv2[2] += 0.4
+        """
 
         if k % h == 0:
             # 1ステップでどれくらい進んだか
             # D = np.linalg.norm(xv2-xv)
             # print(D)
-            trace[kk, :] = np.array([xv2[0], xv2[1], xv2[2]])
+            trace[kk, :] = RV2[0:3]
             kk += 1
 
         # 座標更新
-        xv = xv2
+        RV = RV2
         t += dt
 
         # シミュレーションボックスの外(上)に出たら復帰座標を計算
-        if xv[2] > z_p:
+        if RV[2] > z_p:
             print('UPPER REVERSED')
-            xv = comeback(xv, req, z_p_rad, mirlam)
-            veq = -veq  # 磁力線に平行な速度成分 向き反転
+            RV = comeback(RV, req, z_p_rad, mirlam)
 
         # 磁気赤道面に戻ってきたら終了する
         # if xv2[2] < - 2:
@@ -490,8 +498,8 @@ def rk4(xv, t, dt, tsize, veq, aeq):
 #
 # %% 4次ルンゲクッタ.. classの定義
 class RK4:
-    def __init__(self, xv, t, dt, tsize, veq, aeq):
-        a = rk4(xv, t, dt, tsize, veq, aeq)
+    def __init__(self, RV, t, dt, tsize, veq, aeq):
+        a = rk4(RV, t, dt, tsize, veq, aeq)
         self.positions = a
 
 
@@ -544,14 +552,27 @@ def main():
     x01 = r01[0]*math.cos(phiJ01[0]) - R0x
     y01 = r01[0]*math.sin(phiJ01[0]) - R0y
     z01 = z01[0]
-    xv = np.array([x01, y01, z01])
-    print(xv)
+    R0vec = np.array([x01, y01, z01], dtype=np.float64)
+    print(R0vec)
+
+    # 初期速度ベクトル
+    V0 = 1E+6    # 単位: m/s
+    alpha = np.radians(80)          # 単位: radians
+    beta = 2*np.pi*np.random.rand()  # gyro phaseは乱数で与える. 単位: radians
+    V0vec = V0*np.array([
+        np.sin(alpha)*np.cos(beta),
+        np.sin(alpha)*np.sin(beta),
+        np.cos(alpha)
+    ], dtype=np.float64)
+
+    # 初期座標&初期速度ベクトルの配列
+    RV0vec = np.concatenate([R0vec, V0vec])
 
     # 1粒子トレース
     dt = abs(1/(1E+5 + v0eq*math.cos(alphaeq))) * 100
     # print(dt)
     start = time.time()
-    result = RK4(xv, t, dt, tsize, v0eq, alphaeq).positions
+    result = RK4(RV0vec, t, dt, tsize, v0eq, alphaeq).positions
     print('%.3f seconds' % (time.time()-start))
 
     # SAVE
