@@ -3,6 +3,18 @@
 Created on Sun Dec 19 16:34:00 2021
 @author: Shin Satoh
 
+Description:
+This program is intended to numerically solve the equation (8)
+on Northrop and Birmingham (1982).
+The equation (8) is a second-order ordinary differential equation
+for motion of a charged particle moving in a magnetic field with
+a corotation electric field.
+A particle moves along a magnetic field line with a corotational
+drift velocity (ExB/B^2). Centrifugal force due to the corotation
+affects the motion of a particle along a field line and the velocity
+parallel to the field line, although the mirror points of the particle
+are the same as the non-corotating situtaion.
+
 """
 
 
@@ -31,15 +43,15 @@ FORWARD_BACKWARD = 1  # 1=FORWARD, -1=BACKWARD
 #
 #
 # %% 座標保存の間隔(hステップに1回保存する)
-h = int(2000)
+h = int(4000)
 
 
 #
 #
 # %% SETTINGS FOR THE NEXT EXECUTION
-energy = 50  # eV
-savename = 'go_500ev_aeq77_20211224_1.txt'
-alphaeq = np.radians(60.0)   # PITCH ANGLE
+energy = 5  # eV
+savename = 'go_5ev_aeq89_20211224_1.txt'
+alphaeq = np.radians(89.0)   # PITCH ANGLE
 
 
 #
@@ -157,7 +169,7 @@ def init_points(rmin, rmax, phiJmin, phiJmax, zmin, zmax, nr, nphiJ, nz):
 nr, nphiJ, nz = 20, 100, 1     # x, y, zのビン数
 r_grid, phiJ_grid, z_grid, d_r, d_phiJ = init_points(r_im, r_ip,
                                                      # phiJの範囲(DEGREES)
-                                                     -10.0, -1.0,
+                                                     -30.0, -1.0,
                                                      -1, 1,
                                                      nr, nphiJ, nz)
 
@@ -298,51 +310,6 @@ def comeback(RV, req, lam0, mirlam):
 
 #
 #
-# %% 電子位置ベクトルrについての一階微分方程式
-"""
-@jit('f8[:](f8[:],f8,f8,f8,f8)', nopython=True, fastmath=True)
-def ode(xyz, t, veq, aeq, Beq):
-    x = xyz[0] + R0x
-    y = xyz[1] + R0y
-    z = xyz[2] + R0z
-
-    r = math.sqrt(x**2 + y**2 + z**2)
-    R = math.sqrt(x**2 + y**2)
-
-    # Parallel
-    nakami = 1 - r**5 * math.sin(aeq)**2 * \
-        math.sqrt(r**2 + 3 * z**2) * (x**2 + y**2)**(-3)
-
-    coef = veq * math.sqrt(nakami) * (r**(-1)) * (r**2 + 3 * z**2)**(-0.5)
-
-    v_p_x = 3 * z * x
-    v_p_y = 3 * z * y
-    v_p_z = (2 * z**2) - (x**2 + y**2)
-
-    v_par = coef * np.array([v_p_x, v_p_y, v_p_z], dtype=np.float64)
-    vpa2 = (coef**2) * (v_p_x**2 + v_p_y**2 + v_p_z**2)
-
-    # Drift
-    vpe2 = (veq**2) * (Babs(x, y, z)/Beq) * math.sin(aeq)**2
-    theta = math.acos(z/r)
-    nakami = (vpa2) * r * math.sqrt(x**2 + y**2)
-    nakami2 = 0.5 * vpe2 * (r**2) * math.sin(theta) * \
-        (1 + (z/r)**2) * (1 + 3*(z/r)**2)**(-1)
-
-    vb = A3 * (1+3*(z/r)**2)**(-1) * (nakami+nakami2)
-
-    # 経度方向単位ベクトル
-    e_phi = np.array([-y, x, 0], dtype=np.float64)/R
-
-    # 経度方向ドリフト速度
-    v_drift = (R*omgR + vb)*e_phi
-
-    return v_par + v_drift
-"""
-
-
-#
-#
 # %% 回転中心位置ベクトルRについての運動方程式(eq.8 on Northrop and Birmingham, 1982)
 @jit('f8[:](f8[:],f8, f8)', nopython=True, fastmath=True)
 def ode2(RV, t, mu0):
@@ -390,12 +357,12 @@ def ode2(RV, t, mu0):
     # print('magnetic moment = ', mu)
 
     # ローレンツ力
-    omgRcrossR = np.array([
+    omgRxR = np.array([
         omgRvec[1]*Rvec[2] - omgRvec[2]*Rvec[1],
         omgRvec[2]*Rvec[0] - omgRvec[0]*Rvec[2],
         omgRvec[0]*Rvec[1] - omgRvec[1]*Rvec[0]
     ])
-    L1vec = Vvec - omgRcrossR
+    L1vec = Vvec - omgRxR
     """
     L1vec = np.array([
         Vvec[0] + omgRvec[2]*Rvec[1] - omgRvec[1]*Rvec[2],
@@ -403,7 +370,7 @@ def ode2(RV, t, mu0):
         Vvec[2] + omgRvec[1]*Rvec[0] - omgRvec[0]*Rvec[1]
     ])
     """
-    L1crossB = np.array([
+    L1xB = np.array([
         L1vec[1]*Bvec[2] - L1vec[2]*Bvec[1],
         L1vec[2]*Bvec[0] - L1vec[0]*Bvec[2],
         L1vec[0]*Bvec[1] - L1vec[1]*Bvec[0]
@@ -423,8 +390,8 @@ def ode2(RV, t, mu0):
     ])
     """
 
-    R2dotvec = A1*L1crossB - mu0*dBdR
-    # RVnew = np.stack([Vvec, R2dotvec], 1)   # concatenateでいいんじゃない?
+    R2dotvec = A1*L1xB - mu0*dBdR
+
     RVnew = np.array([Vvec[0], Vvec[1], Vvec[2],
                       R2dotvec[0], R2dotvec[1], R2dotvec[2]], dtype=np.float64)
 
@@ -451,53 +418,11 @@ def rk4(RV, t, dt, tsize, veq, aeq):
     print('mu0: ', mu0)
     RV[3] = 0
 
-    """
-    # Magnetic Field
-    Rvec[2] = Rvec[2] + 200000
-    print(Rvec)
-    B = Babs(Rvec)       # 磁場強度
-    Bvec = Bfield(Rvec)  # 磁場ベクトル
-    bvec = Bvec/B        # 磁力線方向の単位ベクトル
-    dX = 2.
-    dY = 2.
-    dZ = 2.
-    dBdR = np.array([
-        (Babs(Rvec+np.array([dX, 0., 0.])) - B)/dX,
-        (Babs(Rvec+np.array([0., dY, 0.])) - B)/dY,
-        (Babs(Rvec+np.array([0., 0., dZ])) - B)/dZ,
-    ])
-    print('bvec: ', bvec)
-    print('B =', B, ', dBdR dot bvec =', np.dot(dBdR, bvec))
-
-    # Magnetic Field
-    Rvec[2] = Rvec[2] - 400000
-    print(Rvec)
-    B = Babs(Rvec)       # 磁場強度
-    Bvec = Bfield(Rvec)  # 磁場ベクトル
-    bvec = Bvec/B        # 磁力線方向の単位ベクトル
-    dX = 2.
-    dY = 2.
-    dZ = 2.
-    dBdR = np.array([
-        (Babs(Rvec+np.array([dX, 0., 0.])) - B)/dX,
-        (Babs(Rvec+np.array([0., dY, 0.])) - B)/dY,
-        (Babs(Rvec+np.array([0., 0., dZ])) - B)/dZ,
-    ])
-    print('bvec: ', bvec)
-    print('B =', B, ', dBdR dot bvec =', np.dot(dBdR, bvec))
-    """
-
-    # distance from Jupiter
-    req = math.sqrt(Rvec[0]**2 + Rvec[1]**2 + Rvec[2]**2)
-
-    # mirror pointの磁気緯度(rad)
-    # 磁気赤道面ピッチ角が90度より大きいとき
-    if aeq > math.pi/2:
-        mirlam = mirror(math.pi - aeq)
-    else:
-        mirlam = mirror(aeq)
+    # Gyro Period
+    TC = 2*np.pi*me/(-e*B)
 
     # トレース開始
+    dt = 0.1*TC
     dt2 = dt*0.5
 
     # 座標配列
@@ -513,35 +438,6 @@ def rk4(RV, t, dt, tsize, veq, aeq):
         F4 = ode2(RV+dt*F3, t+dt, mu0)
         RV2 = RV + dt*(F1 + 2*F2 + 2*F3 + F4)/6
 
-        # 木星原点の位置ベクトルに変換
-        Rvec = np.array([RV2[0] + R0x,
-                         RV2[1] + R0y,
-                         RV2[2] + R0z])
-        """
-        # 北側のミラーポイント
-        # ミラーポイントがz_pしきい値よりも下にある場合
-        # nakami がほぼゼロになる = ミラー
-        # ミラーしたら、z座標を少し下にずらす&veqの符号を反転させる
-        # veq < 0 ... 北向き
-        r = math.sqrt(x**2 + y**2 + z**2)
-        nakami = 1 - r**5 * math.sin(aeq)**2 * \
-            math.sqrt(r**2 + 3 * z**2) * (x**2 + y**2)**(-3)
-        if math.sqrt(nakami) < 0.001 and xv2[2] > 0 and veq < 0:
-            print('MIRROR NORTH')
-            veq = -veq
-            xv2[2] += -0.4
-
-        # 南側のミラーポイント
-        # ミラーポイントがz_mしきい値よりも上にある場合
-        # nakami がほぼゼロになる = ミラー
-        # ミラーしたら、z座標を少し上にずらす&veqの符号を反転させる
-        # veq > 0 ... 南向き
-        if math.sqrt(nakami) < 0.001 and xv2[2] < 0 and veq > 0:
-            print('MIRROR SOUTH')
-            veq = -veq
-            xv2[2] += 0.4
-        """
-
         if k % h == 0:
             # 1ステップでどれくらい進んだか
             # D = np.linalg.norm(RV2[0:3]-RV[0:3])
@@ -549,47 +445,23 @@ def rk4(RV, t, dt, tsize, veq, aeq):
             trace[kk, :] = RV2[0:3]
             kk += 1
 
-        """
-        # Magnetic Field
+        # 木星原点の位置ベクトルに変換
+        Rvec = np.array([RV2[0] + R0x,
+                         RV2[1] + R0y,
+                         RV2[2] + R0z])
+
+        # Gyro period
         B = Babs(Rvec)       # 磁場強度
-        Bvec = Bfield(Rvec)  # 磁場ベクトル
-        bvec = Bvec/B        # 磁力線方向の単位ベクトル
+        TC = 2*np.pi*me/(-e*B)
+        # print('TC: ', TC)
 
-        # 速度ベクトル
-        Vvec = RV2[3:6]
-        # if abs(np.dot(Vvec, bvec)) < 50:
-        if RV2[2] < -50:
-            dX = 2.
-            dY = 2.
-            dZ = 2.
-            # 磁場強度の微小変位
-            dBdR = np.array([
-                (Babs(Rvec+np.array([dX, 0., 0.])) - B)/dX,
-                (Babs(Rvec+np.array([0., dY, 0.])) - B)/dY,
-                (Babs(Rvec+np.array([0., 0., dZ])) - B)/dZ,
-            ])
-            print('dBdR dot bvec =', B, np.dot(dBdR, bvec))
-            break
-        """
-        # if RV2[2] - RV[2] < 0:
-        #     print('MIRROR')
-
-        # if np.dot(Vvec, bvec) > 100000:
-        #     break
+        # 時間刻みの更新
+        dt = 0.1*TC
+        dt2 = 0.5*dt
 
         # 座標更新
         RV = RV2
         t += dt
-
-        # シミュレーションボックスの外(上)に出たら復帰座標を計算
-        # if RV[2] > z_p:
-        #    print('UPPER REVERSED')
-        #    RV = comeback(RV, req, z_p_rad, mirlam)
-
-        # 磁気赤道面に戻ってきたら終了する
-        # if xv2[2] < - 2:
-        #     print('BREAK')
-        #     break
 
     return trace[0:kk, :]
 
@@ -634,7 +506,7 @@ def calc(r0, phiJ0, z0):
 # %% 時間設定
 t = 0
 dt = float(2E-5)  # 時間刻みはEuropaの近くまで来たらもっと細かくして、衝突判定の精度を上げよう
-t_len = 1200
+t_len = 10000
 # t = np.arange(0, 60, dt)     # np.arange(0, 60, dt)
 tsize = int(t_len/dt)
 
