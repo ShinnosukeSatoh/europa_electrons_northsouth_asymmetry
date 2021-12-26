@@ -46,15 +46,15 @@ FORWARD_BACKWARD = 1  # 1=FORWARD, -1=BACKWARD
 #
 #
 # %% 座標保存の間隔(hステップに1回保存する)
-h = int(500)
+h = int(1000)
 
 
 #
 #
 # %% SETTINGS FOR THE NEXT EXECUTION
-energy = 5  # eV
+energy = 10  # eV
 savename = 'go_100ev_aeq60_20211225_1.txt'
-alphaeq = np.radians(120.0)   # PITCH ANGLE
+alphaeq = np.radians(60.0)   # PITCH ANGLE
 
 
 #
@@ -462,30 +462,30 @@ def rk4(RV0, t, dt, tsize, veq, aeq):
             trace[kk, :] = RV2[0:3]
             kk += 1
 
-        if RV[2] > 3*RJ:
+        if RV[2] > 1*RJ:
             Tnorth += dt
-            if RV2[2] < 3*RJ:
-                Tnorth = Tnorth
+            if RV2[2] < 1*RJ:
+                print('Tnorth: ', Tnorth)
+                Tnorth = 0
 
-        if RV[2] < -3*RJ:
+        if RV[2] < -1*RJ:
             Tsouth += dt
+            if RV2[2] > -1*RJ:
+                print('Tsouth: ', Tsouth)
+                Tsouth = 0
+
+        if (RV[2] < 0) and (RV2[2] > 0):
+            print('South to Equator: ', t, 'sec')
+            print('v parallel', RV[3])
+            t = 0
+        if (RV[2] > 0) and (RV2[2] < 0):
+            print('North to Equator: ', t,  'sec')
+            print('v parallel', RV[3])
+            t = 0
 
         # 座標更新
         RV = RV2
         t += dt
-        if RV0[5] > 0:  # 北向き
-            if RV[2] < -1:
-                print('mirror north')
-                print('t: ', t)
-                print('v parallel', RV[3])
-                break
-
-        if RV0[5] < 0:  # 南向き
-            if RV[2] > 1:
-                print('mirror south')
-                print('t: ', t)
-                print('v parallel', RV[3])
-                break
 
     return trace[0:kk, :]
 
@@ -530,7 +530,7 @@ def calc(r0, phiJ0, z0):
 # %% 時間設定
 t = 0
 dt = float(2E-5)  # 時間刻みはEuropaの近くまで来たらもっと細かくして、衝突判定の精度を上げよう
-t_len = 1000
+t_len = 2000
 # t = np.arange(0, 60, dt)     # np.arange(0, 60, dt)
 tsize = int(t_len/dt)
 
