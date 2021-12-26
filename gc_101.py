@@ -74,8 +74,8 @@ omgJ = FORWARD_BACKWARD*float(1.74E-4)    # 木星の自転角速度 単位: rad
 omgE = FORWARD_BACKWARD*float(2.05E-5)    # Europaの公転角速度 単位: rad/s
 omgR = omgJ-omgE                          # 木星のEuropaに対する相対的な自転角速度 単位: rad/s
 omgRvec = np.array([0., 0., omgR], dtype=np.float64)        # ベクトル化 単位: rad/s
-eomg = np.array([-math.sin(math.degrees(10)),
-                 0., math.cos(math.degrees(10))], dtype=np.float64)
+eomg = np.array([-math.sin(math.radians(10)),
+                 0., math.cos(math.radians(10))], dtype=np.float64)
 omgRvec = omgR*eomg
 
 
