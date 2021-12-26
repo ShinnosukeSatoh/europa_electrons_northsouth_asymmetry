@@ -4,16 +4,19 @@ Created on Sun Dec 25 14:43:00 2021
 @author: Shin Satoh
 
 Description:
-This program is intended to numerically solve the equation (8)
+This program is intended to numerically solve the equation (30)
 on Northrop and Birmingham (1982).
-The equation (8) is a second-order ordinary differential equation
-for motion of a charged particle moving in a magnetic field with
-a corotation electric field.
-A particle moves along a magnetic field line with a corotational
-drift velocity (ExB/B^2). Centrifugal force due to the corotation
-affects the motion of a particle along a field line and the velocity
-parallel to the field line, although the mirror points of the particle
-are the same as the non-corotating situtaion.
+First order in gyroradius terms are omitted.
+The equation (30) is a second-order ordinary differential equation
+for guiding center motion of a charged particle moving in a
+magnetic field with a corotation electric field.
+
+The equation (30) is based on the assumption of
+    vd <<< vc
+            (vd: a corotation drift velocity)
+            (vc: a cyclotron velocity)
+so that you can divide the total velocity into a parallel term and
+a perpendicular term.
 
 """
 
@@ -43,15 +46,15 @@ FORWARD_BACKWARD = 1  # 1=FORWARD, -1=BACKWARD
 #
 #
 # %% 座標保存の間隔(hステップに1回保存する)
-h = int(4000)
+h = int(500)
 
 
 #
 #
 # %% SETTINGS FOR THE NEXT EXECUTION
-energy = 5  # eV
-savename = 'go_5ev_aeq20_20211225_1.txt'
-alphaeq = np.radians(20.0)   # PITCH ANGLE
+energy = 100  # eV
+savename = 'go_100ev_aeq60_20211225_1.txt'
+alphaeq = np.radians(60.0)   # PITCH ANGLE
 
 
 #
@@ -100,6 +103,7 @@ R0 = L96*(np.cos(np.radians(lam)))**(-2)
 R0x = R0
 R0y = 0
 R0z = 0
+R0vec = np.array([R0x, R0y, R0z])
 
 # 初期条件座標エリアの範囲(木星磁気圏動径方向 最大と最小 phiJ=0で決める)
 r_ip = (L96+1.15*RE)*(math.cos(math.radians(lam)))**(-2)
@@ -311,6 +315,20 @@ def comeback(RV, req, lam0, mirlam):
 
 #
 #
+# %% 共回転ドリフト速度
+@jit('f8[:](f8[:])', nopython=True, fastmath=True)
+def Vdvector(Rvec):
+    Vdvec = np.array([
+        omgRvec[1]*Rvec[2] - omgRvec[2]*Rvec[1],
+        omgRvec[2]*Rvec[0] - omgRvec[0]*Rvec[2],
+        omgRvec[0]*Rvec[1] - omgRvec[1]*Rvec[0]
+    ])
+
+    return Vdvec
+
+
+#
+#
 # %% 回転中心位置ベクトルRについての運動方程式(eq.8 on Northrop and Birmingham, 1982)
 @jit('f8[:](f8[:],f8, f8)', nopython=True, fastmath=True)
 def ode2(RV, t, mu0):
@@ -322,9 +340,7 @@ def ode2(RV, t, mu0):
     # RV[3] ... v parallel
 
     # 木星原点の位置ベクトルに変換
-    Rvec = np.array([RV[0] + R0x,
-                     RV[1] + R0y,
-                     RV[2] + R0z])
+    Rvec = RV[0:3] + R0vec
 
     # Magnetic Field
     B = Babs(Rvec)       # 磁場強度
@@ -332,18 +348,30 @@ def ode2(RV, t, mu0):
     bvec = Bvec/B        # 磁力線方向の単位ベクトル
     # print('bvec: ', bvec)
 
-    dX = 5.
-    dY = 5.
-    dZ = 5.
-    # 磁場強度の微小変位
-    dBdR = np.array([
-        (Babs(Rvec+np.array([dX, 0., 0.])) - B)/dX,
-        (Babs(Rvec+np.array([0., dY, 0.])) - B)/dY,
-        (Babs(Rvec+np.array([0., 0., dZ])) - B)/dZ,
-    ])
+    dX = 10.
+    dY = 10.
+    dZ = 10.
 
     # 磁場強度の磁力線に沿った微分
-    dBds = bvec[0]*dBdR[0] + bvec[1]*dBdR[1] + bvec[2]*dBdR[2]
+    ds = 10.
+    dBds = (Babs(Rvec+ds*bvec) - B)/ds
+
+    # 共回転ドリフト速度
+    Vdvec = Vdvector(Rvec)
+    VdX = Vdvector(Rvec+np.array([dX, 0., 0.]))
+    VdY = Vdvector(Rvec+np.array([0., dY, 0.]))
+    VdZ = Vdvector(Rvec+np.array([0., 0., dZ]))
+    Vdpara = bvec[0]*Vdvec[0] + bvec[1]*Vdvec[1] + bvec[2]*Vdvec[2]  # 平行成分
+    VdparaX = bvec[0]*VdX[0] + bvec[1]*VdX[1] + bvec[2]*VdX[2]  # 平行成分
+    VdparaY = bvec[0]*VdY[0] + bvec[1]*VdY[1] + bvec[2]*VdY[2]  # 平行成分
+    VdparaZ = bvec[0]*VdZ[0] + bvec[1]*VdZ[1] + bvec[2]*VdZ[2]  # 平行成分
+    dVdparadR = np.array([
+        (VdparaX - Vdpara)/dX,
+        (VdparaY - Vdpara)/dY,
+        (VdparaZ - Vdpara)/dZ
+    ])
+    dVdparads = bvec[0]*dVdparadR[0] + bvec[1] * \
+        dVdparadR[1] + bvec[2]*dVdparadR[2]
 
     # 磁力線に平行な速度
     Vparavec = RV[3]*bvec
@@ -357,14 +385,7 @@ def ode2(RV, t, mu0):
     ])
     drhods = bvec[0]*drhodR[0] + bvec[1]*drhodR[1] + bvec[2]*drhodR[2]
 
-    dVparadt = -mu0*dBds + (omgR**2)*rho*drhods
-
-    # 共回転ドリフト速度
-    Vdvec = np.array([
-        omgRvec[1]*Rvec[2] - omgRvec[2]*Rvec[1],
-        omgRvec[2]*Rvec[0] - omgRvec[0]*Rvec[2],
-        omgRvec[0]*Rvec[1] - omgRvec[1]*Rvec[0]
-    ])
+    dVparadt = -mu0*dBds + (omgR**2)*rho*drhods + (RV[3]-Vdpara)*dVdparads
 
     RVnew = np.array([Vparavec[0]+Vdvec[0], Vparavec[1]+Vdvec[1], Vparavec[2]+Vdvec[2],
                       dVparadt], dtype=np.float64)
@@ -388,9 +409,7 @@ def rk4(RV0, t, dt, tsize, veq, aeq):
     # aeq: RADIANS
 
     # 木星原点の位置ベクトルに変換
-    Rvec = np.array([RV0[0] + R0x,
-                     RV0[1] + R0y,
-                     RV0[2] + R0z])
+    Rvec = RV0[0:3] + R0vec
 
     # 第一断熱不変量
     B = Babs(Rvec)       # 磁場強度
@@ -403,7 +422,7 @@ def rk4(RV0, t, dt, tsize, veq, aeq):
 
     # トレース開始
     RV = np.array([RV0[0], RV0[1], RV0[2], -RV0[5]])
-    dt = 3*TC
+    dt = 10*TC
     dt2 = dt*0.5
 
     # 座標配列
@@ -420,23 +439,20 @@ def rk4(RV0, t, dt, tsize, veq, aeq):
         RV2 = RV + dt*(F1 + 2*F2 + 2*F3 + F4)/6
 
         # 木星原点の位置ベクトルに変換
-        Rvec = np.array([RV2[0] + R0x,
-                         RV2[1] + R0y,
-                         RV2[2] + R0z])
+        Rvec = RV2[0:3] + R0vec
 
         # Gyro period
-        B = Babs(Rvec)       # 磁場強度
-        TC = 2*np.pi*me/(-e*B)
+        TC = 2*np.pi*me/(-e*Babs(Rvec))
         # print('TC: ', TC)
 
         # 時間刻みの更新
-        dt = 3*TC
+        dt = 10*TC
         dt2 = 0.5*dt
 
         if k % h == 0:
             # 1ステップでどれくらい進んだか
-            D = np.linalg.norm(RV2[0:3]-RV[0:3])
-            print(t, D)
+            # D = np.linalg.norm(RV2[0:3]-RV[0:3])
+            # print(t, D)
             trace[kk, :] = RV2[0:3]
             kk += 1
 
