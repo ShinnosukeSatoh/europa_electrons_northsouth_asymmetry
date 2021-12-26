@@ -46,7 +46,7 @@ FORWARD_BACKWARD = 1  # 1=FORWARD, -1=BACKWARD
 #
 #
 # %% 座標保存の間隔(hステップに1回保存する)
-h = int(1000)
+h = int(500)
 
 
 #
@@ -77,8 +77,8 @@ omgJ = FORWARD_BACKWARD*float(1.74E-4)    # 木星の自転角速度 単位: rad
 omgE = FORWARD_BACKWARD*float(2.05E-5)    # Europaの公転角速度 単位: rad/s
 omgR = omgJ-omgE                          # 木星のEuropaに対する相対的な自転角速度 単位: rad/s
 omgRvec = np.array([0., 0., omgR], dtype=np.float64)        # ベクトル化 単位: rad/s
-eomg = np.array([-math.sin(math.degrees(10)),
-                 0., math.cos(math.degrees(10))], dtype=np.float64)
+eomg = np.array([-math.sin(math.radians(10)),
+                 0., math.cos(math.radians(10))], dtype=np.float64)
 omgRvec = omgR*eomg
 
 
@@ -241,7 +241,7 @@ def Efield(Rvec):
 # %% Newton法でミラーポイントの磁気緯度を調べる
 @jit('f8(f8)', nopython=True, fastmath=True)
 def mirror(alpha):
-    xn = math.radians(1E-5)
+    xn = math.radians(1E-6)
 
     # ニュートン法の反復
     for _ in range(50):
@@ -268,7 +268,7 @@ def mirror(alpha):
 #
 #
 # %% シミュレーションボックスの外に出た粒子の復帰座標を計算
-@jit('f8[:](f8[:],f8,f8,f8)', nopython=True, fastmath=True)
+@jit('f8(f8[:],f8,f8,f8)', nopython=True, fastmath=True)
 def comeback(RV, req, lam0, mirlam):
     # RV: Europa原点座標系
     # lam0: スタートの磁気緯度
@@ -310,7 +310,8 @@ def comeback(RV, req, lam0, mirlam):
     # x,y成分だけ回転させて、z成分は反転?
     # → ダイポール軸と木星自転軸が平行でない場合に適切ではない。
 
-    return np.array([Rvec2[0], Rvec2[1], Rvec2[2], RV[3], RV[4], RV[5]])
+    # return np.array([Rvec2[0], Rvec2[1], Rvec2[2], RV[3], RV[4], RV[5]])
+    return tau
 
 
 #
@@ -348,11 +349,10 @@ def ode2(RV, t, mu0):
     bvec = Bvec/B        # 磁力線方向の単位ベクトル
     # print('bvec: ', bvec)
 
+    # 磁場強度の磁力線に沿った微分
     dX = 10.
     dY = 10.
     dZ = 10.
-
-    # 磁場強度の磁力線に沿った微分
     ds = 10.
     dBds = (Babs(Rvec+ds*bvec) - B)/ds
 
@@ -377,16 +377,31 @@ def ode2(RV, t, mu0):
     Vparavec = RV[3]*bvec
 
     # 自転軸からの距離 rho
-    rho = eomg[0]*Rvec[0] + eomg[1]*Rvec[1] + eomg[2]*Rvec[2]
+    Rlen2 = Rvec[0]**2 + Rvec[1]**2 + Rvec[2]**2
+    Rdot = eomg[0]*Rvec[0] + eomg[1]*Rvec[1] + eomg[2]*Rvec[2]
+    rho = math.sqrt(Rlen2 - Rdot**2)
+
+    Rlen2X = (Rvec[0]+dX)**2 + Rvec[1]**2 + Rvec[2]**2
+    RdotX = eomg[0]*(Rvec[0]+dX) + eomg[1]*Rvec[1] + eomg[2]*Rvec[2]
+    rhoX = math.sqrt(Rlen2X - RdotX**2)
+
+    Rlen2Y = Rvec[0]**2 + (Rvec[1]+dY)**2 + Rvec[2]**2
+    RdotY = eomg[0]*Rvec[0] + eomg[1]*(Rvec[1]+dY) + eomg[2]*Rvec[2]
+    rhoY = math.sqrt(Rlen2Y - RdotY**2)
+
+    Rlen2Z = Rvec[0]**2 + Rvec[1]**2 + (Rvec[2]+dZ)**2
+    RdotZ = eomg[0]*Rvec[0] + eomg[1]*Rvec[1] + eomg[2]*(Rvec[2]+dZ)
+    rhoZ = math.sqrt(Rlen2Z - RdotZ**2)
+
     drhodR = np.array([
-        ((eomg[0]*(Rvec[0]+dX) + eomg[1]*Rvec[1] + eomg[2]*Rvec[2]) - rho)/dX,
-        ((eomg[0]*Rvec[0] + eomg[1]*(Rvec[1]+dY) + eomg[2]*Rvec[2]) - rho)/dY,
-        ((eomg[0]*Rvec[0] + eomg[1]*Rvec[1] + eomg[2]*(Rvec[2]+dZ)) - rho)/dZ
+        (rhoX - rho)/dX,
+        (rhoY - rho)/dY,
+        (rhoZ - rho)/dZ
     ])
     drhods = bvec[0]*drhodR[0] + bvec[1]*drhodR[1] + bvec[2]*drhodR[2]
 
     dVparadt = -mu0*dBds + (omgR**2)*rho*drhods + (RV[3]-Vdpara)*dVdparads
-
+    # print('rho:', rho/RJ)
     RVnew = np.array([Vparavec[0]+Vdvec[0], Vparavec[1]+Vdvec[1], Vparavec[2]+Vdvec[2],
                       dVparadt], dtype=np.float64)
 
@@ -410,6 +425,7 @@ def rk4(RV0, t, dt, tsize, veq, aeq):
 
     # 木星原点の位置ベクトルに変換
     Rvec = RV0[0:3] + R0vec
+    req = math.sqrt(Rvec[0]**2 + Rvec[1]**2 + Rvec[2]**2)
 
     # 第一断熱不変量
     B = Babs(Rvec)       # 磁場強度
@@ -420,9 +436,19 @@ def rk4(RV0, t, dt, tsize, veq, aeq):
     # Gyro Period
     TC = 2*np.pi*me/(-e*B)
 
+    # mirror pointの磁気緯度(rad)
+    # 磁気赤道面ピッチ角が90度より大きいとき
+    if aeq > math.pi/2:
+        # 最初南向き...veqは正
+        mirlam = mirror(math.pi - aeq)
+    else:
+        # 最初北向き...veqは負
+        mirlam = mirror(aeq)
+        veq = -veq
+
     # トレース開始
     RV = np.array([RV0[0], RV0[1], RV0[2], -RV0[5]])
-    dt = 10*TC
+    dt = 20*TC
     dt2 = dt*0.5
 
     # 座標配列
@@ -435,6 +461,7 @@ def rk4(RV0, t, dt, tsize, veq, aeq):
     # 南側ミラーまでの時間
     Tsouth = 0
 
+    T1, T2 = 0, 0
     # ルンゲクッタ
     # print('RK4 START')
     for k in range(tsize-1):
@@ -452,7 +479,7 @@ def rk4(RV0, t, dt, tsize, veq, aeq):
         # print('TC: ', TC)
 
         # 時間刻みの更新
-        dt = 10*TC
+        dt = 20*TC
         dt2 = 0.5*dt
 
         if k % h == 0:
@@ -461,31 +488,50 @@ def rk4(RV0, t, dt, tsize, veq, aeq):
             # print(t, D)
             trace[kk, :] = RV2[0:3]
             kk += 1
-
-        if RV[2] > 1*RJ:
+        """
+        if RV[2] > z_p:
             Tnorth += dt
-            if RV2[2] < 1*RJ:
+            if RV2[2] < z_p:
                 print('Tnorth: ', Tnorth)
+                print('tau: ', comeback(RV, req, z_p_rad, mirlam))
                 Tnorth = 0
+            # if RV[3]*RV2[3] < 0:
+            #     print('mirror point z:', RV[2]/RJ)
+            #     mirrorpoint = R0*math.cos(mirlam)**2 * math.sin(mirlam)
+            #     print('mirror point z:', mirrorpoint/RJ)
 
-        if RV[2] < -1*RJ:
+        if RV[2] < z_m:
             Tsouth += dt
-            if RV2[2] > -1*RJ:
+            if RV2[2] > z_m:
                 print('Tsouth: ', Tsouth)
+                print('tau: ', comeback(RV, req, z_m_rad, mirlam))
                 Tsouth = 0
+            # if RV[3]*RV2[3] < 0:
+            #     print('mirror point z:', RV[2]/RJ)
+            #     mirrorpoint = -R0*math.cos(mirlam)**2 * math.sin(mirlam)
+            #     print('mirror point z:', mirrorpoint/RJ)
+        """
 
         if (RV[2] < 0) and (RV2[2] > 0):
-            print('South to Equator: ', t, 'sec')
+            T1 = t - T1 - T2
+            print('South to Equator: ', T1, 'sec')
+            print('tau: ', comeback(RV, req, 0, mirlam))
             print('v parallel', RV[3])
-            t = 0
+
         if (RV[2] > 0) and (RV2[2] < 0):
-            print('North to Equator: ', t,  'sec')
+            T2 = t - T1 - T2
+            print('North to Equator: ', T2,  'sec')
+            print('tau: ', comeback(RV, req, 0, mirlam))
             print('v parallel', RV[3])
-            t = 0
 
         # 座標更新
         RV = RV2
         t += dt
+
+        if t > 30000:
+            break
+
+    print('t: ', t)
 
     return trace[0:kk, :]
 
@@ -529,8 +575,8 @@ def calc(r0, phiJ0, z0):
 #
 # %% 時間設定
 t = 0
-dt = float(2E-5)  # 時間刻みはEuropaの近くまで来たらもっと細かくして、衝突判定の精度を上げよう
-t_len = 2000
+dt = float(1E-5)  # 時間刻みはEuropaの近くまで来たらもっと細かくして、衝突判定の精度を上げよう
+t_len = 5000
 # t = np.arange(0, 60, dt)     # np.arange(0, 60, dt)
 tsize = int(t_len/dt)
 
