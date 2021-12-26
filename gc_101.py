@@ -43,15 +43,15 @@ FORWARD_BACKWARD = 1  # 1=FORWARD, -1=BACKWARD
 #
 #
 # %% 座標保存の間隔(hステップに1回保存する)
-h = int(4000)
+h = int(5000)
 
 
 #
 #
 # %% SETTINGS FOR THE NEXT EXECUTION
-energy = 5  # eV
-savename = 'go_5ev_aeq89_20211224_1.txt'
-alphaeq = np.radians(89.0)   # PITCH ANGLE
+energy = 100  # eV
+savename = 'go_100ev_aeq60_20211224_1.txt'
+alphaeq = np.radians(60.0)   # PITCH ANGLE
 
 
 #
@@ -74,8 +74,9 @@ omgJ = FORWARD_BACKWARD*float(1.74E-4)    # 木星の自転角速度 単位: rad
 omgE = FORWARD_BACKWARD*float(2.05E-5)    # Europaの公転角速度 単位: rad/s
 omgR = omgJ-omgE                          # 木星のEuropaに対する相対的な自転角速度 単位: rad/s
 omgRvec = np.array([0., 0., omgR], dtype=np.float64)        # ベクトル化 単位: rad/s
-omgRvec = omgR*np.array([-math.sin(math.degrees(10)),
-                         0., math.cos(math.degrees(10))], dtype=np.float64)
+eomg = np.array([-math.sin(math.degrees(10)),
+                 0., math.cos(math.degrees(10))], dtype=np.float64)
+omgRvec = omgR*eomg
 
 
 #
@@ -99,6 +100,7 @@ R0 = L96*(np.cos(np.radians(lam)))**(-2)
 R0x = R0
 R0y = 0
 R0z = 0
+R0vec = np.array([R0x, R0y, R0z])
 
 # 初期条件座標エリアの範囲(木星磁気圏動径方向 最大と最小 phiJ=0で決める)
 r_ip = (L96+1.15*RE)*(math.cos(math.radians(lam)))**(-2)
@@ -323,9 +325,7 @@ def ode2(RV, t, mu0):
     # RV[5] ... vz
 
     # 木星原点の位置ベクトルに変換
-    Rvec = np.array([RV[0] + R0x,
-                     RV[1] + R0y,
-                     RV[2] + R0z])
+    Rvec = RV[0:3] + R0vec
 
     # 速度ベクトル
     Vvec = RV[3:6]
@@ -336,9 +336,9 @@ def ode2(RV, t, mu0):
     # bvec = Bvec/B        # 磁力線方向の単位ベクトル
     # print('bvec: ', bvec)
 
-    dX = 2.
-    dY = 2.
-    dZ = 2.
+    dX = 5.
+    dY = 5.
+    dZ = 5.
     # 磁場強度の微小変位
     dBdR = np.array([
         (Babs(Rvec+np.array([dX, 0., 0.])) - B)/dX,
@@ -357,6 +357,7 @@ def ode2(RV, t, mu0):
     # print('magnetic moment = ', mu)
 
     # ローレンツ力
+    """
     omgRxR = np.array([
         omgRvec[1]*Rvec[2] - omgRvec[2]*Rvec[1],
         omgRvec[2]*Rvec[0] - omgRvec[0]*Rvec[2],
@@ -369,7 +370,7 @@ def ode2(RV, t, mu0):
         Vvec[1] + omgRvec[0]*Rvec[2] - omgRvec[2]*Rvec[0],
         Vvec[2] + omgRvec[1]*Rvec[0] - omgRvec[0]*Rvec[1]
     ])
-    """
+
     L1xB = np.array([
         L1vec[1]*Bvec[2] - L1vec[2]*Bvec[1],
         L1vec[2]*Bvec[0] - L1vec[0]*Bvec[2],
@@ -407,9 +408,7 @@ def rk4(RV, t, dt, tsize, veq, aeq):
     # aeq: RADIANS
 
     # 木星原点の位置ベクトルに変換
-    Rvec = np.array([RV[0] + R0x,
-                     RV[1] + R0y,
-                     RV[2] + R0z])
+    Rvec = RV[0:3] + R0vec
 
     # 第一断熱不変量
     B = Babs(Rvec)       # 磁場強度
@@ -422,7 +421,7 @@ def rk4(RV, t, dt, tsize, veq, aeq):
     TC = 2*np.pi*me/(-e*B)
 
     # トレース開始
-    dt = 0.1*TC
+    dt = 0.3*TC
     dt2 = dt*0.5
 
     # 座標配列
@@ -446,17 +445,14 @@ def rk4(RV, t, dt, tsize, veq, aeq):
             kk += 1
 
         # 木星原点の位置ベクトルに変換
-        Rvec = np.array([RV2[0] + R0x,
-                         RV2[1] + R0y,
-                         RV2[2] + R0z])
+        Rvec = RV2[0:3] + R0vec
 
         # Gyro period
-        B = Babs(Rvec)       # 磁場強度
-        TC = 2*np.pi*me/(-e*B)
+        TC = 2*np.pi*me/(-e*Babs(Rvec))
         # print('TC: ', TC)
 
         # 時間刻みの更新
-        dt = 0.1*TC
+        dt = 0.3*TC
         dt2 = 0.5*dt
 
         # 座標更新
