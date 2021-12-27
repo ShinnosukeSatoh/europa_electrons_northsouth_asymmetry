@@ -431,7 +431,7 @@ def ode2(RV, t, mu0):
 #
 #
 # %% 4次ルンゲクッタ.. functionの定義
-@jit(nopython=True, fastmath=True)
+@jit('f8[:](f8[:],f8, f8)', nopython=True, fastmath=True)
 def rk4(RV0, tsize, TC):
     # RV0.shape >>> (6,)
     # 座標系 = Europa中心の静止系
@@ -464,7 +464,7 @@ def rk4(RV0, tsize, TC):
     # trace[:, 4] ... mu0 (Bがわかればv_perpを取り出せる)
 
     # ルンゲクッタ
-    print('RK4 START')
+    # print('RK4 START')
     yn = 1
     for k in range(tsize-1):
         F1 = ode2(RV, t, mu0)
@@ -483,10 +483,36 @@ def rk4(RV0, tsize, TC):
                          ** 2 + (RV2[2]-eurz)**2)
         if (yn == 1) & (eurR < RE):
             yn = 0
-            print('Collide')
+            # 座標配列
+            # trace[:, 0] ... x座標
+            # trace[:, 1] ... y座標
+            # trace[:, 2] ... z座標
+            # trace[:, 3] ... v_parallel
+            # trace[:, 4] ... v_perp
+            # trace[:, 5] ... yn
+            trace = np.array([
+                0., 0., 0., yn, 0., 0.
+            ])
+            # print('Collide')
+            break
 
         if (RV[3] > 0) & (RV2[3] < 0):
-            print('Magnetic Equator')
+            # print('Magnetic Equator')
+
+            # 第一断熱不変量
+            vperp = np.sqrt(2*mu0*Babs(RV2[0:3] + R0vec))
+            vparallel = RV2[3]
+
+            # 座標配列
+            # trace[:, 0] ... x座標
+            # trace[:, 1] ... y座標
+            # trace[:, 2] ... z座標
+            # trace[:, 3] ... v_parallel
+            # trace[:, 4] ... v_perp
+            # trace[:, 5] ... yn
+            trace = np.array([
+                RV2[0], RV2[1], RV2[2], yn, vparallel, vperp
+            ])
             break
 
         # 時間刻みの更新
@@ -496,22 +522,6 @@ def rk4(RV0, tsize, TC):
         # 座標更新
         RV = RV2
         t += dt
-
-    # 第一断熱不変量
-    B = Babs(RV[0:3] + R0vec)    # 磁気赤道面のはず(z=0)
-    vperp = np.sqrt(2*mu0*B)
-    vparallel = RV[3]
-
-    # 座標配列
-    # trace[:, 0] ... x座標
-    # trace[:, 1] ... y座標
-    # trace[:, 2] ... z座標
-    # trace[:, 3] ... v_parallel
-    # trace[:, 4] ... v_perp
-    # trace[:, 5] ... yn
-    trace = np.array([
-        RV[0], RV[1], RV[2], vparallel, vperp, yn
-    ])
 
     return trace
 
@@ -528,28 +538,60 @@ class RK4:
 #
 #
 # %% トレースを行うfunction
-def calc(colat, long):
+def calc(mcolatr, mlongr):
     start0 = time.time()
 
     Rinitvec = np.array([
-        RE*np.sin(colat)*np.cos(long) + eurx,
-        RE*np.sin(colat)*np.sin(long) + eury,
-        RE*np.cos(colat) + eurz
+        RE*math.sin(mcolatr)*math.cos(mlongr),
+        RE*math.sin(mcolatr)*math.sin(mlongr),
+        RE*math.cos(mcolatr)
     ])
 
-    # 出発点(余緯度, 経度)と終点座標(x,y,z)とv_parallel, v_perp, ynを格納する配列
-    result = np.zeros((len(alpha_array), 8))
+    # 表面法線ベクトル
+    nvec = Rinitvec / \
+        math.sqrt(Rinitvec[0]**2 + Rinitvec[1]**2 + Rinitvec[2]**2)
 
+    # TRACE座標系に
+    Rinitvec = np.array([
+        Rinitvec[0] + eurx,
+        Rinitvec[1] + eury,
+        Rinitvec[2] + eurz
+    ])
+
+    # result[:, 0] ... 出発点 x座標
+    # result[:, 1] ... 出発点 y座標
+    # result[:, 2] ... 出発点 z座標
+    # result[:, 3] ... 終点 x座標
+    # result[:, 4] ... 終点 y座標
+    # result[:, 5] ... 終点 z座標
+    # result[:, 6] ... yn
+    # result[:, 7] ... 終点 v_parallel
+    # result[:, 8] ... 終点 v_perp
+    # result[:, 9] ... 出発点 v_dot_n
+    result = np.zeros((len(alpha_array), 10))
+
+    # 磁場と平行な単位ベクトル
+    B = Babs(Rinitvec + R0vec)
+    bvec = Bfield(Rinitvec + R0vec)/B
+
+    # Gyro Period
+    TC = 2*np.pi*me/(-e*B)
+
+    # LOOP INDEX INITIALIZED
     i = 0
     for alpha in alpha_array:
-        # 第一断熱不変量
-        B = Babs(Rinitvec + R0vec)
-        vparallel = V0*math.cos(alpha)
-        vperp = V0*math.sin(alpha)
-        mu0 = 0.5*(vperp**2)/B
+        beta = 2*np.pi*np.random.rand()
+        V0vec = V0*np.array([
+            math.sin(alpha)*math.cos(beta),
+            math.sin(alpha)*math.sin(beta),
+            math.cos(alpha)
+        ])
+        vparallel = bvec[0]*V0vec[0] + bvec[1]*V0vec[1] + bvec[2]*V0vec[2]
+        vperp = math.sqrt(V0**2 - vparallel**2)
+        vdotn = nvec[0]*V0vec[0] + nvec[1]*V0vec[1] + nvec[2]*V0vec[2]
 
-        # Gyro Period
-        TC = 2*np.pi*me/(-e*B)
+        # 第一断熱不変量
+        mu0 = 0.5*(vperp**2)/B
 
         # 初期座標&初期速度ベクトルの配列
         # RV0vec[0] ... x座標
@@ -561,19 +603,22 @@ def calc(colat, long):
             Rinitvec[0], Rinitvec[1], Rinitvec[2], vparallel, mu0
         ])
 
+        # TRACING
         rk4 = RK4(RV0vec, tsize, TC)
 
-        # 初期座標&初期速度ベクトルの配列
-        # result[:, 0] ... 出発点 余緯度
-        # result[:, 1] ... 出発点 経度
-        # result[:, 2] ... 終点 x座標
-        # result[:, 3] ... 終点 y座標
-        # result[:, 4] ... 終点 z座標
-        # result[:, 5] ... v_parallel
-        # result[:, 6] ... v_perp
-        # result[:, 7] ... yn
-        result[i, 0:2] = np.array([colat, long])
-        result[i, 2:8] = rk4.positions
+        # result[:, 0] ... 出発点 x座標
+        # result[:, 1] ... 出発点 y座標
+        # result[:, 2] ... 出発点 z座標
+        # result[:, 3] ... 終点 x座標
+        # result[:, 4] ... 終点 y座標
+        # result[:, 5] ... 終点 z座標
+        # result[:, 6] ... yn
+        # result[:, 7] ... 終点 v_parallel
+        # result[:, 8] ... 終点 v_perp
+        # result[:, 9] ... 出発点 v_dot_n
+        result[i, 0:3] = Rinitvec
+        result[i, 3:9] = rk4.positions
+        result[i, 9] = vdotn
         i += 1
     print('A BIN DONE: %.3f seconds ----------' % (time.time() - start0))
     return result
@@ -594,25 +639,24 @@ tsize = int(t_len/dt)
 # %% main関数
 def main():
     # Europa表面の初期座標
-    ncolat = 10  # 分割数
-    nphi = 20    # 分割数
-    colat_array = np.radians(np.linspace(0, 180, ncolat))
-    long_array = np.radians(np.linspace(0, 360, nphi))
-    meshlong, meshcolat = np.meshgrid(long_array, colat_array)
+    ncolat = 50  # 分割数
+    nphi = 100    # 分割数
+    meshlong, meshcolat = np.meshgrid(
+        np.radians(np.linspace(0, 360, nphi)),
+        np.radians(np.linspace(0, 180, ncolat))
+    )
     # meshlong: 経度
     # meshcolat: 余緯度
-    Rinitvec = np.array([
-        RE*np.sin(meshcolat)*np.cos(meshlong) + eurx,
-        RE*np.sin(meshcolat)*np.sin(meshlong) + eury,
-        RE*np.cos(meshcolat) + eurz
-    ])
-
-    # x0r = Rinitvec[0].reshape(Rinitvec[0].size)  # 1次元化
-    # y0r = Rinitvec[1].reshape(Rinitvec[1].size)  # 1次元化
-    # z0r = Rinitvec[2].reshape(Rinitvec[2].size)  # 1次元化
 
     mcolatr = meshcolat.reshape(meshcolat.size)  # 1次元化
     mlongr = meshlong.reshape(meshlong.size)  # 1次元化
+
+    # 情報表示
+    print('alpha: {:>7d}'.format(alpha_array.size))
+    print('ncolat: {:>7d}'.format(ncolat))
+    print('nphi: {:>7d}'.format(nphi))
+    print('total: {:>7d}'.format(alpha_array.size*ncolat*nphi))
+    # print(savename)
 
     # 並列計算用 変数リスト(zip)
     args = list(zip(mcolatr, mlongr))  # np.arrayは不可。ここが1次元なのでpoolの結果も1次元。
@@ -627,19 +671,21 @@ def main():
     # 返り値(配列 *行8列)
     # 結果をreshape
     trace = np.array(result_list)
-    trace = trace.reshape([int(alpha_array.size*ncolat*nphi), 8])
+    trace = trace.reshape([int(alpha_array.size*ncolat*nphi), 10])
     print(trace.shape)
     # print(trace)
 
-    # 初期座標&初期速度ベクトルの配列
-    # trace[0] ... 出発点 余緯度
-    # trace[1] ... 出発点 経度
-    # trace[2] ... 終点 x座標
-    # trace[3] ... 終点 y座標
-    # trace[4] ... 終点 z座標
-    # trace[5] ... v_parallel
-    # trace[6] ... v_perp
-    # trace[7] ... yn
+    # trace[:, 0] ... 出発点 x座標
+    # trace[:, 1] ... 出発点 y座標
+    # trace[:, 2] ... 出発点 z座標
+    # trace[:, 3] ... 終点 x座標
+    # trace[:, 4] ... 終点 y座標
+    # trace[:, 5] ... 終点 z座標
+    # trace[:, 6] ... yn
+    # trace[:, 7] ... 終点 v_parallel
+    # trace[:, 8] ... 終点 v_perp
+    # trace[:, 9] ... 出発点 v_dot_n
+
     """
     np.savetxt(
     '/Users/shin/Documents/Research/Europa/Codes/gyrocenter/gyrocenter_1/' +
