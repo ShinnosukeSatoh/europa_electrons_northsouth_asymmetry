@@ -18,6 +18,9 @@ The equation (30) is based on the assumption of
 so that you can divide the total velocity into a parallel term and
 a perpendicular term.
 
+This program is fully functional in both a forward-in-time tracing
+and a backward-in-time tracing. WELL DONE!
+
 """
 
 
@@ -40,7 +43,7 @@ color = ['#6667AB', '#0F4C81', '#5B6770', '#FF6F61', '#645394',
 #
 #
 # %% FORWARD OR BACKWARD
-FORWARD_BACKWARD = 1  # 1=FORWARD, -1=BACKWARD
+FORWARD_BACKWARD = -1  # 1=FORWARD, -1=BACKWARD
 
 
 #
@@ -53,7 +56,8 @@ h = int(500)
 #
 # %% SETTINGS FOR THE NEXT EXECUTION
 energy = 10  # eV
-savename = 'go_100ev_aeq60_20211225_1.txt'
+savename_f = 'go_100ev_aeq60_20211225_1_forward.txt'
+savename_b = 'go_100ev_aeq60_20211225_1_backward.txt'
 alphaeq = np.radians(60.0)   # PITCH ANGLE
 
 
@@ -73,9 +77,9 @@ G = float(6.67E-11)     # 万有引力定数  単位: m^3 kg^-1 s^-2
 
 mu = float(1.26E-6)     # 真空中透磁率  単位: N A^-2 = kg m s^-2 A^-2
 Mdip = float(1.6E+27)   # Jupiterのダイポールモーメント 単位: A m^2
-omgJ = FORWARD_BACKWARD*float(1.74E-4)    # 木星の自転角速度 単位: rad/s
-omgE = FORWARD_BACKWARD*float(2.05E-5)    # Europaの公転角速度 単位: rad/s
-omgR = omgJ-omgE                          # 木星のEuropaに対する相対的な自転角速度 単位: rad/s
+omgJ = float(1.74E-4)   # 木星の自転角速度 単位: rad/s
+omgE = float(2.05E-5)   # Europaの公転角速度 単位: rad/s
+omgR = omgJ-omgE        # 木星のEuropaに対する相対的な自転角速度 単位: rad/s
 omgRvec = np.array([0., 0., omgR], dtype=np.float64)        # ベクトル化 単位: rad/s
 eomg = np.array([-math.sin(math.radians(10)),
                  0., math.cos(math.radians(10))], dtype=np.float64)
@@ -88,7 +92,7 @@ omgRvec = omgR*eomg
 # A1 = float(e/me)                  # 運動方程式内の定数
 # A2 = float(mu*Mdip/4/3.14)        # ダイポール磁場表式内の定数
 A1 = float(-1.7582E+11)             # 運動方程式内の定数
-A2 = FORWARD_BACKWARD*1.60432E+20   # ダイポール磁場表式内の定数
+A2 = 1.60432E+20                    # ダイポール磁場表式内の定数
 A3 = 4*3.1415*me/(mu*Mdip*e)        # ドリフト速度の係数
 
 
@@ -412,29 +416,25 @@ def ode2(RV, t, mu0):
 #
 # %% 4次ルンゲクッタ.. functionの定義
 @jit(nopython=True, fastmath=True)
-def rk4(RV0, t, dt, tsize, veq, aeq):
+def rk4(RV0, tsize, veq, aeq, TC):
     # RV0.shape >>> (6,)
     # 座標系 = Europa中心の静止系
     # RV0[0] ... x of Guiding Center
     # RV0[1] ... y
     # RV0[2] ... z
-    # RV0[3] ... vx of Guiding Center
-    # RV0[4] ... vy
-    # RV0[5] ... vz
+    # RV0[3] ... v parallel
+    # RV0[4] ... mu0
     # aeq: RADIANS
+
+    # 時刻初期化
+    t = 0
+
+    # 磁気モーメント
+    mu0 = RV0[4]
 
     # 木星原点の位置ベクトルに変換
     Rvec = RV0[0:3] + R0vec
     req = math.sqrt(Rvec[0]**2 + Rvec[1]**2 + Rvec[2]**2)
-
-    # 第一断熱不変量
-    B = Babs(Rvec)       # 磁場強度
-    print('B: ', B)
-    mu0 = 0.5*(RV0[3]**2)/B
-    print('mu0: ', mu0)
-
-    # Gyro Period
-    TC = 2*np.pi*me/(-e*B)
 
     # mirror pointの磁気緯度(rad)
     # 磁気赤道面ピッチ角が90度より大きいとき
@@ -447,19 +447,24 @@ def rk4(RV0, t, dt, tsize, veq, aeq):
         veq = -veq
 
     # トレース開始
-    RV = np.array([RV0[0], RV0[1], RV0[2], -RV0[5]])
-    dt = 20*TC
+    RV = RV0[0:4]
+    dt = FORWARD_BACKWARD*20*TC
     dt2 = dt*0.5
 
     # 座標配列
-    trace = np.zeros((int(tsize/h), 3))
+    # trace[:, 0] ... x座標
+    # trace[:, 1] ... y座標
+    # trace[:, 2] ... z座標
+    # trace[:, 3] ... v_parallel
+    # trace[:, 4] ... mu0
+    trace = np.zeros((int(tsize/h), 5))
     kk = 0
 
     # 北側ミラーまでの時間
-    Tnorth = 0
+    # Tnorth = 0
 
     # 南側ミラーまでの時間
-    Tsouth = 0
+    # Tsouth = 0
 
     T1, T2 = 0, 0
     # ルンゲクッタ
@@ -479,15 +484,18 @@ def rk4(RV0, t, dt, tsize, veq, aeq):
         # print('TC: ', TC)
 
         # 時間刻みの更新
-        dt = 20*TC
+        dt = FORWARD_BACKWARD*20*TC
         dt2 = 0.5*dt
 
         if k % h == 0:
             # 1ステップでどれくらい進んだか
             # D = np.linalg.norm(RV2[0:3]-RV[0:3])
             # print(t, D)
-            trace[kk, :] = RV2[0:3]
+            trace[kk, :] = np.array([
+                RV2[0], RV2[1], RV2[2], RV2[3], mu0
+            ])
             kk += 1
+
         """
         if RV[2] > z_p:
             Tnorth += dt
@@ -510,7 +518,6 @@ def rk4(RV0, t, dt, tsize, veq, aeq):
             #     print('mirror point z:', RV[2]/RJ)
             #     mirrorpoint = -R0*math.cos(mirlam)**2 * math.sin(mirlam)
             #     print('mirror point z:', mirrorpoint/RJ)
-        """
 
         if (RV[2] < 0) and (RV2[2] > 0):
             T1 = t - T1 - T2
@@ -523,12 +530,13 @@ def rk4(RV0, t, dt, tsize, veq, aeq):
             print('North to Equator: ', T2,  'sec')
             print('tau: ', comeback(RV, req, 0, mirlam))
             print('v parallel', RV[3])
+        """
 
         # 座標更新
         RV = RV2
         t += dt
 
-        if t > 30000:
+        if abs(t) > 20000:
             break
 
     print('t: ', t)
@@ -540,9 +548,9 @@ def rk4(RV0, t, dt, tsize, veq, aeq):
 #
 # %% 4次ルンゲクッタ.. classの定義
 class RK4:
-    def __init__(self, RV, t, dt, tsize, veq, aeq):
-        a = rk4(RV, t, dt, tsize, veq, aeq)
-        self.positions = a
+    def __init__(self, RV0, tsize, veq, aeq, TC):
+        result = rk4(RV0, tsize, veq, aeq, TC)
+        self.positions = result
 
 
 #
@@ -594,35 +602,74 @@ def main():
     x01 = r01[0]*math.cos(phiJ01[0]) - R0x
     y01 = r01[0]*math.sin(phiJ01[0]) - R0y
     z01 = z01[0]
-    R0vec = np.array([x01, y01, z01], dtype=np.float64)
-    print(R0vec)
+    Rinitvec = np.array([x01, y01, z01], dtype=np.float64)
+    print(Rinitvec)
 
     # 初期速度ベクトル
     V0 = v0eq    # 単位: m/s
-    print('V0: ', V0)
     V0vec = V0*np.array([
         np.sin(alphaeq),
         0.,
         np.cos(alphaeq)
     ], dtype=np.float64)
+    print('V0: ', V0)
+    print('V0vec: ', V0vec)
+
+    # 第一断熱不変量
+    B = Babs(Rinitvec + R0vec)
+    Bvec = Bfield(Rinitvec + R0vec)
+    bvec = Bvec/B
+    vparallel = bvec[0]*V0vec[0] + bvec[1]*V0vec[1] + bvec[2]*V0vec[2]
+    vperp = math.sqrt(V0**2 - vparallel**2)
+    print('B: ', B)
+    mu0 = 0.5*(vperp**2)/B
+    print('mu0: ', mu0)
+
+    # Gyro Period
+    TC = 2*np.pi*me/(-e*B)
 
     # 初期座標&初期速度ベクトルの配列
-    print('V0vec: ', V0vec)
-    RV0vec = np.hstack((R0vec, V0vec))
+    # RV0vec[0] ... x座標
+    # RV0vec[1] ... y座標
+    # RV0vec[2] ... z座標
+    # RV0vec[3] ... v parallel
+    # RV0vec[4] ... mu0
+    RV0vec = np.array([
+        Rinitvec[0], Rinitvec[1], Rinitvec[2], vparallel, mu0
+    ])
 
-    # 1粒子トレース
-    # dt = 1E-5
-    # print(dt)
-    start = time.time()
-    result = RK4(RV0vec, t, dt, tsize, v0eq, alphaeq).positions
-    print('%.3f seconds' % (time.time()-start))
+    # backtracing用
+    endpoint = np.array([
+        -2.27126925e+08,
+        -4.19701568e+08,
+        -1.55203618e+08,
+        2.89130657e+05,
+        2.47972641E+18])
+    RV0vec = endpoint
 
-    # SAVE
-    np.savetxt(
-        '/Users/shin/Documents/Research/Europa/Codes/gyrocenter/gyrocenter_1/' +
-        str(savename), result
-    )
-    print('DONE')
+    # FORWARD
+    if FORWARD_BACKWARD == 1:
+        print('FORWARD START')
+        start = time.time()
+        forward_result = RK4(RV0vec, tsize, V0, alphaeq, TC).positions
+        print('%.3f seconds' % (time.time()-start))
+        np.savetxt(
+            '/Users/shin/Documents/Research/Europa/Codes/gyrocenter/gyrocenter_1/' +
+            str(savename_f), forward_result
+        )
+        print('FORWARD DONE')
+
+    # BACKWARD
+    elif FORWARD_BACKWARD == -1:
+        print('BACKWARD START')
+        start = time.time()
+        backward_result = RK4(endpoint, tsize, V0, alphaeq, TC).positions
+        print('%.3f seconds' % (time.time()-start))
+        np.savetxt(
+            '/Users/shin/Documents/Research/Europa/Codes/gyrocenter/gyrocenter_1/' +
+            str(savename_b), backward_result
+        )
+        print('BACKWARD DONE')
 
     return 0
 
