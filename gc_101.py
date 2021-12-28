@@ -49,9 +49,9 @@ h = int(5000)
 #
 #
 # %% SETTINGS FOR THE NEXT EXECUTION
-energy = 100  # eV
-savename = 'go_100ev_aeq60_20211224_1.txt'
-alphaeq = np.radians(60.0)   # PITCH ANGLE
+energy = 10  # eV
+savename = 'go_10ev_aeq60_20211224_2.txt'
+alphaeq = np.radians(60.)   # PITCH ANGLE
 
 
 #
@@ -74,8 +74,8 @@ omgJ = FORWARD_BACKWARD*float(1.74E-4)    # 木星の自転角速度 単位: rad
 omgE = FORWARD_BACKWARD*float(2.05E-5)    # Europaの公転角速度 単位: rad/s
 omgR = omgJ-omgE                          # 木星のEuropaに対する相対的な自転角速度 単位: rad/s
 omgRvec = np.array([0., 0., omgR], dtype=np.float64)        # ベクトル化 単位: rad/s
-eomg = np.array([-math.sin(math.radians(10)),
-                 0., math.cos(math.radians(10))], dtype=np.float64)
+eomg = np.array([-math.sin(math.radians(0)),
+                 0., math.cos(math.radians(0))], dtype=np.float64)
 omgRvec = omgR*eomg
 
 
@@ -333,7 +333,7 @@ def ode2(RV, t, mu0):
     # Magnetic Field
     B = Babs(Rvec)       # 磁場強度
     Bvec = Bfield(Rvec)  # 磁場ベクトル
-    # bvec = Bvec/B        # 磁力線方向の単位ベクトル
+    bvec = Bvec/B        # 磁力線方向の単位ベクトル
     # print('bvec: ', bvec)
 
     dX = 5.
@@ -390,6 +390,10 @@ def ode2(RV, t, mu0):
         Bvec[0] - omgRvec[0]*Rvec[2]*Bvec[0]
     ])
     """
+    vparallel = bvec[0]*Vvec[0] + bvec[1]*Vvec[1] + bvec[2]*Vvec[2]
+    vperp2 = Vvec[0]**2 + Vvec[1]**2 + Vvec[2]**2 - vparallel**2
+    mu = 0.5*(vperp2)/B
+    # print('mu/mu0: ', mu/mu0)
 
     R2dotvec = A1*L1xB - mu0*dBdR
 
@@ -427,7 +431,6 @@ def rk4(RV, t, dt, tsize, veq, aeq):
     # 座標配列
     trace = np.zeros((int(tsize/h), 3))
     kk = 0
-
     # ルンゲクッタ
     # print('RK4 START')
     for k in range(tsize-1):
@@ -454,6 +457,12 @@ def rk4(RV, t, dt, tsize, veq, aeq):
         # 時間刻みの更新
         dt = 0.3*TC
         dt2 = 0.5*dt
+
+        if (RV[2] < 0) and (RV2[2] > 0):
+            break
+
+        if (RV[2] > 0) and (RV2[2] < 0):
+            break
 
         # 座標更新
         RV = RV2
@@ -502,7 +511,7 @@ def calc(r0, phiJ0, z0):
 # %% 時間設定
 t = 0
 dt = float(2E-5)  # 時間刻みはEuropaの近くまで来たらもっと細かくして、衝突判定の精度を上げよう
-t_len = 10000
+t_len = 5000
 # t = np.arange(0, 60, dt)     # np.arange(0, 60, dt)
 tsize = int(t_len/dt)
 

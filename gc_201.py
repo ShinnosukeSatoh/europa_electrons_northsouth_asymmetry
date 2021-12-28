@@ -52,9 +52,9 @@ h = int(500)
 #
 #
 # %% SETTINGS FOR THE NEXT EXECUTION
-energy = 100  # eV
+energy = 1000  # eV
 savename = 'go_100ev_aeq60_20211225_1.txt'
-alphaeq = np.radians(60.0)   # PITCH ANGLE
+alphaeq = np.radians(60.)   # PITCH ANGLE
 
 
 #
@@ -456,6 +456,12 @@ def rk4(RV0, t, dt, tsize, veq, aeq):
             trace[kk, :] = RV2[0:3]
             kk += 1
 
+        if (RV[2] < 0) and (RV2[2] > 0):
+            break
+
+        if (RV[2] > 0) and (RV2[2] < 0):
+            break
+
         # 座標更新
         RV = RV2
         t += dt
@@ -522,7 +528,7 @@ def main():
     y01 = r01[0]*math.sin(phiJ01[0]) - R0y
     z01 = z01[0]
     R0vec = np.array([x01, y01, z01], dtype=np.float64)
-    print(R0vec)
+    # print(R0vec)
 
     # 初期速度ベクトル
     V0 = v0eq    # 単位: m/s

@@ -134,12 +134,13 @@ z_below_rad = math.asin(
 #
 # %% 初期位置エリア(z=0)での速度ベクトル (つまり磁気赤道面でのピッチ角)
 V0 = math.sqrt((energy/me)*2*float(1.602E-19))
-pitch = int(2)  # 0-90度を何分割するか
+pitch = int(70)  # 0-90度を何分割するか
 alphaeq0 = np.radians(np.linspace(0.1, 89.91, int(pitch+1)))   # PITCH ANGLE
 a0c = (alphaeq0[1:] + alphaeq0[:-1])/2
 alphaeq1 = np.radians(np.linspace(90.09, 179.9, int(pitch+1)))   # PITCH ANGLE
 a1c = (alphaeq1[1:] + alphaeq1[:-1])/2
 alpha_array = np.hstack([a0c, a1c])
+# alpha_array = np.radians(np.linspace(89.9, 90.1, 4))
 
 
 #
@@ -248,10 +249,15 @@ def Babs(Rvec):
 #
 #
 # %% 共回転電場
+@jit('f8[:](f8[:])', nopython=True, fastmath=True)
 def Efield(Rvec):
     # x, y, zは木星からの距離
     Bvec = Bfield(Rvec)
-    Evec = np.dot(omgRvec, Bvec)*Rvec - np.dot(Rvec, Bvec)*omgRvec
+    omgRvec_dot_Bvec = omgRvec[0]*Bvec[0] + \
+        omgRvec[1]*Bvec[1] + omgRvec[2]*Bvec[2]
+    Rvec_dot_Bvec = Rvec[0]*Bvec[0] + Rvec[1]*Bvec[1] + Rvec[2]*Bvec[2]
+
+    Evec = omgRvec_dot_Bvec*Rvec - Rvec_dot_Bvec*omgRvec
 
     return Evec
 
@@ -686,12 +692,25 @@ def main():
     # trace[:, 8] ... 終点 v_perp
     # trace[:, 9] ... 出発点 v_dot_n
 
+    # Europaに衝突しない(yn=1)の粒子を取り出す
+    yn1 = np.where(trace[:, 6] == 1)  # 0でない行を見つける(検索は表面yn=6列目)
+    mageq = trace[yn1]  # 0でない行だけ取り出し
+
     """
     np.savetxt(
     '/Users/shin/Documents/Research/Europa/Codes/gyrocenter/gyrocenter_1/' +
     str(savename_f), trace
     )
     """
+
+    # 情報表示
+    print('alpha: {:>7d}'.format(alpha_array.size))
+    print('ncolat: {:>7d}'.format(ncolat))
+    print('nphi: {:>7d}'.format(nphi))
+    print('total: {:>7d}'.format(alpha_array.size*ncolat*nphi))
+
+    print('magnetic equator: {:>7d}'.format(mageq[:, 0].size))
+    # print(savename)
 
     return 0
 
