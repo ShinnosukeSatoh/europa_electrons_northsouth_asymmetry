@@ -37,21 +37,21 @@ color = ['#6667AB', '#0F4C81', '#5B6770', '#FF6F61', '#645394',
 #
 #
 # %% FORWARD OR BACKWARD
-FORWARD_BACKWARD = 1  # 1=FORWARD, -1=BACKWARD
+FORWARD_BACKWARD = -1  # 1=FORWARD, -1=BACKWARD
 
 
 #
 #
 # %% 座標保存の間隔(hステップに1回保存する)
-h = int(5000)
+h = int(2000)
 
 
 #
 #
 # %% SETTINGS FOR THE NEXT EXECUTION
-energy = 10  # eV
-savename = 'go_10ev_aeq60_20211224_2.txt'
-alphaeq = np.radians(60.)   # PITCH ANGLE
+energy = 100  # eV
+savename = 'go_10ev_aeq20_20211224_back_1.txt'
+alphaeq = np.radians(70.)   # PITCH ANGLE
 
 
 #
@@ -70,22 +70,21 @@ G = float(6.67E-11)     # 万有引力定数  単位: m^3 kg^-1 s^-2
 
 mu = float(1.26E-6)     # 真空中透磁率  単位: N A^-2 = kg m s^-2 A^-2
 Mdip = float(1.6E+27)   # Jupiterのダイポールモーメント 単位: A m^2
-omgJ = FORWARD_BACKWARD*float(1.74E-4)    # 木星の自転角速度 単位: rad/s
-omgE = FORWARD_BACKWARD*float(2.05E-5)    # Europaの公転角速度 単位: rad/s
-omgR = omgJ-omgE                          # 木星のEuropaに対する相対的な自転角速度 単位: rad/s
-omgRvec = np.array([0., 0., omgR], dtype=np.float64)        # ベクトル化 単位: rad/s
-eomg = np.array([-math.sin(math.radians(0)),
-                 0., math.cos(math.radians(0))], dtype=np.float64)
+omgJ = float(1.74E-4)   # 木星の自転角速度 単位: rad/s
+omgE = float(2.05E-5)   # Europaの公転角速度 単位: rad/s
+omgR = omgJ-omgE        # 木星のEuropaに対する相対的な自転角速度 単位: rad/s
+eomg = np.array([-np.sin(np.radians(10.)),
+                 0., np.cos(np.radians(10.))])
 omgRvec = omgR*eomg
 
 
 #
 #
 # %% 途中計算でよく出てくる定数の比
-# A1 = float(e/me)                  # 運動方程式内の定数
-# A2 = float(mu*Mdip/4/3.14)        # ダイポール磁場表式内の定数
-A1 = float(-1.7582E+11)             # 運動方程式内の定数
-A2 = FORWARD_BACKWARD*1.60432E+20   # ダイポール磁場表式内の定数
+A1 = float(e/me)                  # 運動方程式内の定数
+A2 = float(mu*Mdip/4/3.14)        # ダイポール磁場表式内の定数
+# A1 = float(-1.7582E+11)             # 運動方程式内の定数
+# A2 = 1.60432E+20                    # ダイポール磁場表式内の定数
 A3 = 4*3.1415*me/(mu*Mdip*e)        # ドリフト速度の係数
 
 
@@ -215,6 +214,9 @@ def Bfield(Rvec):
     return Bvec
 
 
+#
+#
+# %% 磁場強度
 @jit('f8(f8[:])', nopython=True, fastmath=True)
 def Babs(Rvec):
     # x, y, zは木星からの距離
@@ -425,7 +427,7 @@ def rk4(RV, t, dt, tsize, veq, aeq):
     TC = 2*np.pi*me/(-e*B)
 
     # トレース開始
-    dt = 0.3*TC
+    dt = FORWARD_BACKWARD*0.3*TC
     dt2 = dt*0.5
 
     # 座標配列
@@ -455,14 +457,14 @@ def rk4(RV, t, dt, tsize, veq, aeq):
         # print('TC: ', TC)
 
         # 時間刻みの更新
-        dt = 0.3*TC
+        dt = FORWARD_BACKWARD*0.3*TC
         dt2 = 0.5*dt
 
-        if (RV[2] < 0) and (RV2[2] > 0):
-            break
+        # if (RV[2] < 0) and (RV2[2] > 0):
+        #     break
 
-        if (RV[2] > 0) and (RV2[2] < 0):
-            break
+        # if (RV[2] > 0) and (RV2[2] < 0):
+        #     break
 
         # 座標更新
         RV = RV2
@@ -511,7 +513,7 @@ def calc(r0, phiJ0, z0):
 # %% 時間設定
 t = 0
 dt = float(2E-5)  # 時間刻みはEuropaの近くまで来たらもっと細かくして、衝突判定の精度を上げよう
-t_len = 5000
+t_len = 1000
 # t = np.arange(0, 60, dt)     # np.arange(0, 60, dt)
 tsize = int(t_len/dt)
 
@@ -526,9 +528,9 @@ def main():
     z01 = z_grid.reshape(z_grid.size)  # 1次元化
 
     # 初期座標
-    x01 = r01[0]*math.cos(phiJ01[0]) - R0x
-    y01 = r01[0]*math.sin(phiJ01[0]) - R0y
-    z01 = z01[0]
+    x01 = eurx
+    y01 = eury - RE
+    z01 = eurz
     R0vec = np.array([x01, y01, z01], dtype=np.float64)
     print(R0vec)
 
