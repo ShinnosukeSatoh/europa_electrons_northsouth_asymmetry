@@ -257,7 +257,8 @@ def vec3cross(vec1, vec2, vec3):
 @jit('f8[:](f8[:],f8)', nopython=True, fastmath=True)
 def Corotation(Rvec, theta):
     """
-    DESCRIPTION IS HERE.
+    `Rvec` ... <ndarray> ダイポール原点の位置ベクトル \\
+    `theta` ... 共回転の回転角 [RADIANS]
     """
     n1 = eomg[0]
     n2 = eomg[1]
@@ -287,7 +288,7 @@ def Corotation(Rvec, theta):
 @jit('f8[:](f8[:])', nopython=True, fastmath=True)
 def Bfield(Rvec):
     """
-    DESCRIPTION IS HERE.
+    `Rvec` ... <ndarray> ダイポール原点の位置ベクトル
     """
     # x, y, zは木星からの距離
     x = Rvec[0]
@@ -309,7 +310,7 @@ def Bfield(Rvec):
 @jit('f8(f8[:])', nopython=True, fastmath=True)
 def Babs(Rvec):
     """
-    DESCRIPTION IS HERE.
+    `Rvec` ... <ndarray> ダイポール原点の位置ベクトル
     """
     # x, y, zは木星からの距離
     Bvec = Bfield(Rvec)
@@ -320,25 +321,12 @@ def Babs(Rvec):
 
 #
 #
-# %% 共回転電場ベクトル
-def Efield(Rvec):
-    """
-    DESCRIPTION IS HERE.
-    """
-    # x, y, zは木星からの距離
-    Bvec = Bfield(Rvec)
-    Evec = np.dot(omgRvec, Bvec)*Rvec - np.dot(Rvec, Bvec)*omgRvec
-
-    return Evec
-
-
-#
-#
 # %% Newton法でミラーポイントの磁気緯度を調べる(ダイポール磁場)
 @jit('f8(f8, f8)', nopython=True, fastmath=True)
 def mirrorpoint(lamu, alphau):
     """
-    DESCRIPTION IS HERE.
+    `lamu` ... その場の磁気緯度 \\
+    `alphau` ... その場のピッチ角 [RADIANS]
     """
     xn = math.radians(1E-5)
 
@@ -390,7 +378,9 @@ def Vdvector(omg, Rvec):
 @jit('f8[:](f8,f8[:])', nopython=True, fastmath=True)
 def centrif(omg, Rvec):
     """
-    omgvec x (omgvec x Rvec)
+    `omg` ... 角速度 [rad/s] \\
+    `Rvec` ... <ndarray> ダイポール原点の位置ベクトル \\
+    三重積 omgvec x (omgvec x Rvec) の計算
     """
     omgvec = omg*eomg
     cross3 = np.array([
@@ -411,7 +401,7 @@ def centrif(omg, Rvec):
 @jit('f8(f8[:])', nopython=True, fastmath=True)
 def Rho(Rvec):
     """
-    DESCRIPTION IS HERE.
+    `Rvec` ... <ndarray> ダイポール原点の位置ベクトル
     """
     Rlen2 = Rvec[0]**2 + Rvec[1]**2 + Rvec[2]**2
     Rdot = eomg[0]*Rvec[0] + eomg[1]*Rvec[1] + eomg[2]*Rvec[2]
@@ -513,8 +503,9 @@ def comeback(RV2, req, lam0, K0):
 @jit('f8[:](f8[:],f8, f8)', nopython=True, fastmath=True)
 def ode2(RV, t, K0):
     """
-    DESCRIPTION IS HERE.
-    `aaaa`
+    `RV2` ... <ndarray> trace座標系 \\
+    `t` ... 時刻 \\
+    `K0` ... 保存量
     """
     # RV.shape >>> (6,)
     # 座標系 = Europa中心の静止系
@@ -586,16 +577,17 @@ def ode2(RV, t, K0):
 @jit('f8[:](f8[:],f8, f8)', nopython=True, fastmath=True)
 def rk4(RV0, tsize, TC):
     """
-    DESCRIPTION IS HERE.
+    `RV0` ... <ndarray> trace座標系 \\
+    `tsize` ... 時刻tのサイズ \\
+    `TC` ... サイクロトロン周期 [s] \\
+    Details follow: \\
+    `RV0.shape` ... (6,) \\
+    `RV0[0]` ... x of Guiding Center \\
+    `RV0[1]` ... y \\
+    `RV0[2]` ... z \\
+    `RV0[3]` ... v parallel \\
+    `RV0[4]` ... K0 (保存量)
     """
-    # RV0.shape >>> (6,)
-    # 座標系 = Europa中心の静止系
-    # RV0[0] ... x of Guiding Center
-    # RV0[1] ... y
-    # RV0[2] ... z
-    # RV0[3] ... v parallel
-    # RV0[4] ... K0 (保存量)
-    # aeq: RADIANS
 
     # 時刻初期化
     t = 0

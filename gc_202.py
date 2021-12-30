@@ -538,8 +538,9 @@ def comeback(RV2, req, lam0, K0):
 @jit('f8[:](f8[:],f8, f8)', nopython=True, fastmath=True)
 def ode2(RV, t, K0):
     """
-    DESCRIPTION IS HERE.
-    `aaaa`
+    `RV2` ... <ndarray> trace座標系 \\
+    `t` ... 時刻 \\
+    `K0` ... 保存量
     """
     # RV.shape >>> (6,)
     # 座標系 = Europa中心の静止系
@@ -609,18 +610,19 @@ def ode2(RV, t, K0):
 #
 # %% 4次ルンゲクッタ.. functionの定義
 @jit(nopython=True, fastmath=True)
-def rk4(RV0, tsize, aeq, TC):
+def rk4(RV0, tsize, TC):
     """
-    DESCRIPTION IS HERE.
+    `RV0` ... <ndarray> trace座標系 \\
+    `tsize` ... 時刻tのサイズ \\
+    `TC` ... サイクロトロン周期 [s] \\
+    Details follow: \\
+    `RV0.shape` ... (6,) \\
+    `RV0[0]` ... x of Guiding Center \\
+    `RV0[1]` ... y \\
+    `RV0[2]` ... z \\
+    `RV0[3]` ... v parallel \\
+    `RV0[4]` ... K0 (保存量)
     """
-    # RV0.shape >>> (6,)
-    # 座標系 = Europa中心の静止系
-    # RV0[0] ... x of Guiding Center
-    # RV0[1] ... y
-    # RV0[2] ... z
-    # RV0[3] ... v parallel
-    # RV0[4] ... K0 (保存量)
-    # aeq: RADIANS
 
     # 時刻初期化
     t = 0
@@ -765,8 +767,8 @@ def rk4(RV0, tsize, aeq, TC):
 #
 # %% 4次ルンゲクッタ.. classの定義
 class RK4:
-    def __init__(self, RV0, tsize, aeq, TC):
-        result = rk4(RV0, tsize, aeq, TC)
+    def __init__(self, RV0, tsize, TC):
+        result = rk4(RV0, tsize, TC)
         self.positions = result
 
 
@@ -880,8 +882,7 @@ def main():
     if FORWARD_BACKWARD == 1:
         print('FORWARD START')
         start = time.time()
-        forward_result = RK4(RV0vec, tsize,
-                             alphaeq, TC).positions
+        forward_result = RK4(RV0vec, tsize, TC).positions
         print('%.3f seconds' % (time.time()-start))
         np.savetxt(
             '/Users/shin/Documents/Research/Europa/Codes/gyrocenter/gyrocenter_1/' +
@@ -893,8 +894,7 @@ def main():
     elif FORWARD_BACKWARD == -1:
         print('BACKWARD START')
         start = time.time()
-        backward_result = RK4(RV0vec, tsize,
-                              alphaeq, TC).positions
+        backward_result = RK4(RV0vec, tsize, TC).positions
         print('%.3f seconds' % (time.time()-start))
         np.savetxt(
             '/Users/shin/Documents/Research/Europa/Codes/gyrocenter/gyrocenter_1/' +
