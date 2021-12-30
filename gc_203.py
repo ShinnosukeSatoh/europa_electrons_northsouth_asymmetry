@@ -334,20 +334,22 @@ def Efield(Rvec):
 
 #
 #
-# %% Newton法でミラーポイントの磁気緯度を調べる
-@jit('f8(f8)', nopython=True, fastmath=True)
-def mirror(alpha):
+# %% Newton法でミラーポイントの磁気緯度を調べる(ダイポール磁場)
+@jit('f8(f8, f8)', nopython=True, fastmath=True)
+def mirrorpoint(lamu, alphau):
     """
     DESCRIPTION IS HERE.
     """
     xn = math.radians(1E-5)
 
+    K = (math.sin(alphau)**2)*(math.cos(lamu)**6) * \
+        (1+3*math.sin(lamu)**2)**(-0.5)
+
     # ニュートン法の反復
     for _ in range(50):
-        f = math.cos(xn)**6 - math.sqrt(1+3*math.sin(xn)**2) * \
-            (math.sin(alpha)**2)
+        f = math.cos(xn)**6 - math.sqrt(1+3*math.sin(xn)**2)*K
         fdash = -6*(math.cos(xn)**5)*math.sin(xn) - 3*(math.sqrt(1+3*math.sin(xn)
-                                                                 ** 2)**(-1))*math.sin(xn)*math.cos(xn)*(math.sin(alpha)**2)
+                                                                 ** 2)**(-1))*math.sin(xn)*math.cos(xn)*K
         xn += - f/fdash
 
     # xnは 360度以上 の数字になりうるので, 磁気緯度として相応しい値に変換する
@@ -359,7 +361,7 @@ def mirror(alpha):
     elif (la > 1.5*np.pi) and (la < 2*np.pi):
         la = 2*np.pi - la
 
-    print('mirror point: ', np.degrees(la))
+    # print('mirror point: ', np.degrees(la))
 
     return la
 
@@ -367,32 +369,16 @@ def mirror(alpha):
 #
 #
 # %% 共回転ドリフト速度
-@jit('f8[:](f8[:])', nopython=True, fastmath=True)
-def Vdvector(Rvec):
+@jit('f8[:](f8,f8[:])', nopython=True, fastmath=True)
+def Vdvector(omg, Rvec):
     """
     DESCRIPTION IS HERE.
     """
+    omgvec = omg*eomg
     Vdvec = np.array([
-        omgRvec[1]*Rvec[2] - omgRvec[2]*Rvec[1],
-        omgRvec[2]*Rvec[0] - omgRvec[0]*Rvec[2],
-        omgRvec[0]*Rvec[1] - omgRvec[1]*Rvec[0]
-    ])
-
-    return Vdvec
-
-
-#
-#
-# %% 共回転ドリフト速度(IN THE DEPLETION REGION)
-@jit('f8[:](f8[:])', nopython=True, fastmath=True)
-def Vdvector2(Rvec):
-    """
-    DESCRIPTION IS HERE.
-    """
-    Vdvec = np.array([
-        omgR2vec[1]*Rvec[2] - omgR2vec[2]*Rvec[1],
-        omgR2vec[2]*Rvec[0] - omgR2vec[0]*Rvec[2],
-        omgR2vec[0]*Rvec[1] - omgR2vec[1]*Rvec[0]
+        omgvec[1]*Rvec[2] - omgvec[2]*Rvec[1],
+        omgvec[2]*Rvec[0] - omgvec[0]*Rvec[2],
+        omgvec[0]*Rvec[1] - omgvec[1]*Rvec[0]
     ])
 
     return Vdvec
@@ -401,38 +387,19 @@ def Vdvector2(Rvec):
 #
 #
 # %% 遠心力項
-@jit('f8[:](f8[:])', nopython=True, fastmath=True)
-def centrif(Rvec):
+@jit('f8[:](f8,f8[:])', nopython=True, fastmath=True)
+def centrif(omg, Rvec):
     """
-    omgRvec x (omgRvec x Rvec)
+    omgvec x (omgvec x Rvec)
     """
+    omgvec = omg*eomg
     cross3 = np.array([
-        omgRvec[1]*(omgRvec[0]*Rvec[1]-omgRvec[1]*Rvec[0]) -
-        omgRvec[2]*(omgRvec[2]*Rvec[0]-omgRvec[0]*Rvec[2]),
-        omgRvec[2]*(omgRvec[1]*Rvec[2]-omgRvec[2]*Rvec[1]) -
-        omgRvec[0]*(omgRvec[0]*Rvec[1]-omgRvec[1]*Rvec[0]),
-        omgRvec[0]*(omgRvec[2]*Rvec[0]-omgRvec[0]*Rvec[2]) -
-        omgRvec[1]*(omgRvec[1]*Rvec[2]-omgRvec[2]*Rvec[1])
-    ])
-
-    return cross3
-
-
-#
-#
-# %% 遠心力項(IN THE DEPLETION REGION)
-@jit('f8[:](f8[:])', nopython=True, fastmath=True)
-def centrif2(Rvec):
-    """
-    omgR2vec x (omgRvec x Rvec)
-    """
-    cross3 = np.array([
-        omgR2vec[1]*(omgR2vec[0]*Rvec[1]-omgR2vec[1]*Rvec[0]) -
-        omgR2vec[2]*(omgR2vec[2]*Rvec[0]-omgR2vec[0]*Rvec[2]),
-        omgR2vec[2]*(omgR2vec[1]*Rvec[2]-omgR2vec[2]*Rvec[1]) -
-        omgR2vec[0]*(omgR2vec[0]*Rvec[1]-omgR2vec[1]*Rvec[0]),
-        omgR2vec[0]*(omgR2vec[2]*Rvec[0]-omgR2vec[0]*Rvec[2]) -
-        omgR2vec[1]*(omgR2vec[1]*Rvec[2]-omgR2vec[2]*Rvec[1])
+        omgvec[1]*(omgvec[0]*Rvec[1]-omgvec[1]*Rvec[0]) -
+        omgvec[2]*(omgvec[2]*Rvec[0]-omgvec[0]*Rvec[2]),
+        omgvec[2]*(omgvec[1]*Rvec[2]-omgvec[2]*Rvec[1]) -
+        omgvec[0]*(omgvec[0]*Rvec[1]-omgvec[1]*Rvec[0]),
+        omgvec[0]*(omgvec[2]*Rvec[0]-omgvec[0]*Rvec[2]) -
+        omgvec[1]*(omgvec[1]*Rvec[2]-omgvec[2]*Rvec[1])
     ])
 
     return cross3
@@ -456,27 +423,40 @@ def Rho(Rvec):
 #
 #
 # %% シミュレーションボックスの外に出た粒子の復帰座標を計算
-@jit('f8[:](f8[:],f8,f8,f8,f8)', nopython=True, fastmath=True)
-def comeback(RV2, req, lam0, mirlam, K0):
+@jit('f8[:](f8[:],f8,f8,f8)', nopython=True, fastmath=True)
+def comeback(RV2, req, lam0, K0):
     """
-    DESCRIPTION IS HERE.
-
+    `RV2` ... <ndarray> trace座標系 \\
+    `req` ... ダイポールからの距離(@磁気赤道面) \\
+    `lam0` ... スタートの磁気緯度 \\
+    `K0` ... 保存量
     """
-    # Rvec: 木星原点
-    # lam0: スタートの磁気緯度
-    # mirlam: mirror pointの磁気緯度
 
     Rvec = RV2[0:3] + R0vec
+
+    # DEPLETION領域
+    mphiR = math.atan2(Rvec[1], Rvec[0])
+    if (mphiR < mphi_leading) & (mphiR > mphi_trailing):   # IN THE DEPLETION REGION
+        omg = omgR2
+    else:   # OUT OF THE DEPLETION REGION
+        omg = omgR
+
     bvec = Bfield(Rvec)/Babs(Rvec)
-    Vdvec = Vdvector(Rvec)
+    Vdvec = Vdvector(omg, Rvec)
     Vdpara = vecdot(bvec, Vdvec)
     Vdperp = math.sqrt(Vdvec[0]**2 + Vdvec[1]
                        ** 2 + Vdvec[2]**2 - Vdpara**2)
     vperp = math.sqrt(
-        2*K0/me - (RV2[3]-Vdpara)**2 + (Rho(Rvec)*omgR)**2) - Vdperp
+        2*K0/me - (RV2[3]-Vdpara)**2 + (Rho(Rvec)*omg)**2) - Vdperp
     vparallel = RV2[3] - Vdpara
     v_new = math.sqrt(vparallel**2 + vperp**2)
     veq = v_new
+
+    # その場のピッチ角
+    alphau = math.atan2(vperp, vparallel)
+
+    # ミラーポイントの磁気緯度
+    mirlam = mirrorpoint(lam0, alphau)
 
     # 積分の刻み
     dellam = 1E-3
@@ -501,11 +481,18 @@ def comeback(RV2, req, lam0, mirlam, K0):
 
     # 共回転復帰座標
     tau = FORWARD_BACKWARD*2*tau0
-    Rvec_new = Corotation(Rvec, omgR*tau)
+    Rvec_new = Corotation(Rvec, omg*tau)
+
+    # DEPLETION領域
+    mphiR = math.atan2(Rvec_new[1], Rvec_new[0])
+    if (mphiR < mphi_leading) & (mphiR > mphi_trailing):   # IN THE DEPLETION REGION
+        omg = omgR2
+    else:   # OUT OF THE DEPLETION REGION
+        omg = omgR
 
     # 保存量
     bvec = Bfield(Rvec)/Babs(Rvec)
-    Vdvec = Vdvector(Rvec)
+    Vdvec = Vdvector(omg, Rvec)
     Vdpara = vecdot(bvec, Vdvec)
     # Vdperp = math.sqrt(Vdvec[0]**2 + Vdvec[1]
     #                   ** 2 + Vdvec[2]**2 - Vdpara**2)
@@ -556,50 +543,30 @@ def ode2(RV, t, K0):
     # DEPLETION領域
     mphiR = math.atan2(Rvec[1], Rvec[0])
     if (mphiR < mphi_leading) & (mphiR > mphi_trailing):   # IN THE DEPLETION REGION
-        # 遠心力項
-        omgRxomgRxR_s = vecdot(bvec, -centrif2(Rvec))  # 遠心力項の平行成分
-
-        # 共回転ドリフト速度
-        Vdvec = Vdvector2(Rvec)          # 共回転ドリフト速度ベクトル
-        Vdpara = vecdot(bvec, Vdvec)    # 平行成分
-
         omg = omgR2
 
-        # 微分の平行成分
-        dVdparads = vecdot(
-            bvec,
-            np.array([
-                (vecdot(bvec,
-                        Vdvector2(Rvec+np.array([dX, 0., 0.]))) - Vdpara)/dX,
-                (vecdot(bvec,
-                        Vdvector2(Rvec+np.array([0., dY, 0.]))) - Vdpara)/dY,
-                (vecdot(bvec,
-                        Vdvector2(Rvec+np.array([0., 0., dZ]))) - Vdpara)/dZ
-            ])
-        )
-
     else:   # OUT OF THE DEPLETION REGION
-        # 遠心力項
-        omgRxomgRxR_s = vecdot(bvec, -centrif(Rvec))  # 遠心力項の平行成分
-
-        # 共回転ドリフト速度
-        Vdvec = Vdvector(Rvec)          # 共回転ドリフト速度ベクトル
-        Vdpara = vecdot(bvec, Vdvec)    # 平行成分
-
         omg = omgR
 
-        # 微分の平行成分
-        dVdparads = vecdot(
-            bvec,
-            np.array([
-                (vecdot(bvec,
-                        Vdvector(Rvec+np.array([dX, 0., 0.]))) - Vdpara)/dX,
-                (vecdot(bvec,
-                        Vdvector(Rvec+np.array([0., dY, 0.]))) - Vdpara)/dY,
-                (vecdot(bvec,
-                        Vdvector(Rvec+np.array([0., 0., dZ]))) - Vdpara)/dZ
-            ])
-        )
+    # 遠心力項
+    omgRxomgRxR_s = vecdot(bvec, -centrif(omg, Rvec))  # 遠心力項の平行成分
+
+    # 共回転ドリフト速度
+    Vdvec = Vdvector(omg, Rvec)          # 共回転ドリフト速度ベクトル
+    Vdpara = vecdot(bvec, Vdvec)    # 平行成分
+
+    # 微分の平行成分
+    dVdparads = vecdot(
+        bvec,
+        np.array([
+            (vecdot(bvec,
+                    Vdvector(omg, Rvec+np.array([dX, 0., 0.]))) - Vdpara)/dX,
+            (vecdot(bvec,
+                    Vdvector(omg, Rvec+np.array([0., dY, 0.]))) - Vdpara)/dY,
+            (vecdot(bvec,
+                    Vdvector(omg, Rvec+np.array([0., 0., dZ]))) - Vdpara)/dZ
+        ])
+    )
 
     # 係数 mu
     mu = (K0-0.5*me*(RV[3]-Vdpara)**2 + 0.5*me*(Rho(Rvec)*omg)**2)/B
@@ -638,6 +605,10 @@ def rk4(RV0, tsize, TC):
 
     # 木星原点の位置ベクトルに変換
     Rvec = RV0[0:3] + R0vec
+
+    # ダイポールからの距離(@磁気赤道面 近似)
+    r = math.sqrt(Rvec[0]**2 + Rvec[1]**2 + Rvec[2]**2)
+    req = r/(math.cos(lam)**2)
 
     # トレース開始
     RV = RV0[0:4]
@@ -683,16 +654,30 @@ def rk4(RV0, tsize, TC):
             # print('Loss')
             break
 
+        if (RV[2] < z_p) and (RV2[2] > z_p):
+            # print('UPPER')
+            RV2 = comeback(RV2, req, z_p_rad, K0)
+
         # 磁気赤道面への到達
         # if (RV[2] < 0) and (RV2[2] > 0):
         #     print('South to Equator: ', t, 'sec')
         #     break
 
+        # 磁気赤道面への到達 North to Equator
         if (RV[2] > 0) and (RV2[2] < 0):
             Rvec = 0.5*(RV[0:3] + RV2[0:3]) + R0vec
+            # DEPLETION領域かどうか
+            mphiR = math.atan2(Rvec[1], Rvec[0])
+            # IN THE DEPLETION REGION
+            if (mphiR < mphi_leading) & (mphiR > mphi_trailing):
+                omg = omgR2
+            # OUT OF THE DEPLETION REGION
+            else:
+                omg = omgR
+
             # print('North to Equator: ', t,  'sec')
             bvec = Bfield(Rvec)/Babs(Rvec)
-            Vdvec = Vdvector(Rvec)
+            Vdvec = Vdvector(omg, Rvec)
             Vdpara = vecdot(bvec, Vdvec)
             Vdperp = math.sqrt(Vdvec[0]**2 + Vdvec[1]
                                ** 2 + Vdvec[2]**2 - Vdpara**2)
@@ -705,8 +690,8 @@ def rk4(RV0, tsize, TC):
 
             K1 = 0.5*me*((vparallel)**2 -
                          (Rho(Rvec)*omgR)**2 + (vperp+Vdperp)**2)
-            print('alpha_end [degrees]: ', math.degrees(alpha_end))
-            print('energy_end [eV]: ', energy_end)
+            # print('alpha_end [degrees]: ', math.degrees(alpha_end))
+            # print('energy_end [eV]: ', energy_end)
             print('K1/K0: ', K1/K0)
 
             # 座標配列
@@ -794,7 +779,7 @@ def calc(mcolatr, mlongr):
 
     # 自転軸からの距離 rho (BACKTRACING)
     rho = Rho(Rinitvec + R0vec)
-    Vdvec = Vdvector2(Rinitvec + R0vec)
+    Vdvec = Vdvector(omgR2, Rinitvec + R0vec)
     Vdpara = bvec[0]*Vdvec[0] + bvec[1]*Vdvec[1] + bvec[2]*Vdvec[2]  # 平行成分
 
     # Gyro Period
