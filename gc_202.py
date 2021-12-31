@@ -55,10 +55,10 @@ h = int(500)
 #
 #
 # %% SETTINGS FOR THE NEXT EXECUTION
-energy = 10  # eV
+energy = 1000  # eV
 savename_f = 'go_1000ev_aeq60_20211230_1_forward.txt'
 savename_b = 'go_1000ev_aeq60_20211230_1_backward.txt'
-alphaeq = np.radians(30)   # PITCH ANGLE
+alphaeq = np.radians(60)   # PITCH ANGLE
 
 
 #
@@ -122,7 +122,7 @@ eurz = L96*math.sin(math.radians(lam))
 # 遠方しきい値(z方向) 磁気緯度で設定
 z_p_rad = math.radians(11.0)      # 北側
 z_p = R0*math.cos(z_p_rad)**2 * math.sin(z_p_rad)
-z_m_rad = math.radians(11.0)      # 南側
+z_m_rad = math.radians(2.0)      # 南側
 z_m = -R0*math.cos(z_m_rad)**2 * math.sin(z_m_rad)
 
 # Europa真下(からさらに5m下)の座標と磁気緯度
@@ -672,7 +672,7 @@ def rk4(RV0, tsize, TC):
                           ** 2 + (RV2[2]-eurz)**2)
         if r_eur < RE:
             print('Collide')
-            break
+            # break
 
         # 木星に衝突
         r_jovi = math.sqrt(Rvec[0]**2 + Rvec[1]**2 + Rvec[2]**2)
@@ -682,8 +682,8 @@ def rk4(RV0, tsize, TC):
 
         if k % h == 0:
             # 1ステップでどれくらい進んだか
-            # D = np.linalg.norm(RV2[0:3]-RV[0:3])
-            # print(t, D)
+            D = np.linalg.norm(RV2[0:3]-RV[0:3])
+            print(t, D)
             trace[kk, :] = np.array([
                 RV2[0], RV2[1], RV2[2], RV2[3], K0
             ])
@@ -706,6 +706,10 @@ def rk4(RV0, tsize, TC):
         if (RV[2] < z_p) and (RV2[2] > z_p):
             print('UPPER')
             RV2 = comeback(RV2, req, z_p_rad, K0)
+
+        if (RV[2] > z_m) and (RV2[2] < z_m):
+            print('LOWER')
+            RV2 = comeback(RV2, req, z_m_rad, K0)
 
         # 磁気赤道面への到達
         # if (RV[2] < 0) and (RV2[2] > 0):
@@ -826,7 +830,7 @@ def main():
     # BACKTRACING
     x01 = eurx
     y01 = eury
-    z01 = 0  # eurz + RE
+    z01 = eurz - RE
     Rinitvec = np.array([x01, y01, z01], dtype=np.float64)
     # print(Rinitvec)
 

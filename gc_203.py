@@ -55,9 +55,8 @@ h = int(500)
 #
 #
 # %% SETTINGS FOR THE NEXT EXECUTION
-energy = 10  # eV
-savename_f = 'go_100ev_aeq60_20211225_1_forward.txt'
-savename_b = 'go_100ev_aeq60_20211225_1_backward.txt'
+energy = 1000  # eV
+savename = 'gc203_1000ev_20211231_1.txt'
 
 
 #
@@ -121,9 +120,8 @@ eurz = L96*math.sin(math.radians(lam)) - R0z
 # 遠方しきい値(z方向) 磁気緯度で設定
 z_p_rad = math.radians(11.0)      # 北側
 z_p = R0*math.cos(z_p_rad)**2 * math.sin(z_p_rad)
-z_m_rad = math.radians(11.0)      # 南側
+z_m_rad = math.radians(2.0)      # 南側
 z_m = -R0*math.cos(z_m_rad)**2 * math.sin(z_m_rad)
-
 
 # DEPLETION領域
 depletionR = 1.05*RE  # 円筒の半径
@@ -135,87 +133,61 @@ mphi_trailing = math.atan2(eury+R0y-depletionR, eurx+R0x)    # 後行半球中�
 #
 # %% 初期位置エリア(z=0)での速度ベクトル (つまり磁気赤道面でのピッチ角)
 V0 = math.sqrt((energy/me)*2*float(1.602E-19))
-pitch = int(30)  # 0-90度を何分割するか
+pitch = int(25)  # 0-90度を何分割するか
 alphaeq0 = np.radians(np.linspace(0.1, 89.91, int(pitch+1)))   # PITCH ANGLE
 a0c = (alphaeq0[1:] + alphaeq0[:-1])/2
 alphaeq1 = np.radians(np.linspace(90.09, 179.9, int(pitch+1)))   # PITCH ANGLE
 a1c = (alphaeq1[1:] + alphaeq1[:-1])/2
 alpha_array = np.hstack([a0c, a1c])
-# alpha_array = np.radians(np.linspace(89.9, 90.1, 4))
+d_alpha = np.abs(alpha_array[1]-alpha_array[0])
 
 
 #
 #
-# %% Europa表面の点から放射状に粒子を放つときの初期条件の設定
-def surface_init(colat_mesh, phi_mesh, v0, alpha, beta):
-    Rinitvec = np.array([
-        RE*np.sin(np.radians(colat_mesh)) *
-        np.cos(np.radians(phi_mesh)),     # x0
-        RE*np.sin(np.radians(colat_mesh)) * \
-        np.sin(np.radians(phi_mesh)),     # y0
-        # z0
-        RE*np.cos(np.radians(colat_mesh))
-    ])
-
-    return Rinitvec
-
-
-#
-#
-# %% 初期座標ビンの設定ファンクション(磁気赤道面の2次元極座標 + z軸)
-def init_points(rmin, rmax, phiJmin, phiJmax, zmin, zmax, nr, nphiJ, nz):
-    r_bins = np.linspace(rmin, rmax, nr)
-    phiJ_bins = np.radians(np.linspace(
-        phiJmin, phiJmax, nphiJ))    # DEGREES TO RADIANS
-    z_bins = np.array([0])
-
-    # 動径方向の中点
-    r_bins = np.linspace(rmin, rmax, 10)
-    r_mae = r_bins[:-1]
-    r_ushiro = r_bins[1:]
-    r_middle = (r_ushiro + r_mae)*0.5   # r 中点
-
-    # 経度方向の中点
-    phiJ_mae = phiJ_bins[:-1]
-    phiJ_ushiro = phiJ_bins[1:]
-    phiJ_middle = (phiJ_ushiro + phiJ_mae)*0.5  # phiJ 中点
-
-    # 3次元グリッドの作成
-    r_grid, phiJ_grid, z_grid = np.meshgrid(r_middle, phiJ_middle, z_bins)
-
-    # ビンの中でシフトさせる距離(r-phiJ平面)
-    d_r = 0.5*np.abs(r_grid[0, 1, 0] - r_grid[0, 0, 0])
-    d_phiJ = 0.5*np.abs(phiJ_grid[1, 0, 0] - phiJ_grid[0, 0, 0])
-
-    return r_grid, phiJ_grid, z_grid, d_r, d_phiJ
-
-
-# %% 初期座標ビンの設定(グローバル)
-nr, nphiJ, nz = 20, 100, 1     # x, y, zのビン数
-r_grid, phiJ_grid, z_grid, d_r, d_phiJ = init_points(r_im, r_ip,
-                                                     # phiJの範囲(DEGREES)
-                                                     -30.0, -1.0,
-                                                     -1, 1,
-                                                     nr, nphiJ, nz)
+# %% Europa表面の初期座標
+ncolat = 10  # 分割数
+nphi = 20    # 分割数
+long_array = np.radians(np.linspace(0, 360, nphi+1))
+colat_array = np.radians(np.linspace(0, 180, ncolat+1))
+# 動径方向の中点
+long_middle = (long_array[1:] + long_array[:-1])*0.5   # r 中点
+colat_middle = (colat_array[1:] + colat_array[:-1])*0.5   # r 中点
+meshlong, meshcolat = np.meshgrid(long_middle, colat_middle)
+# meshlong: 経度
+# meshcolat: 余緯度
+# ビンの中でシフトさせる距離(r-phiJ平面)
+d_long = 0.5*np.abs(meshlong[0, 1] - meshlong[0, 0])
+d_colat = 0.5*np.abs(meshcolat[1, 0] - meshcolat[0, 0])
 
 
 #
 #
 # %% 初期座標をシフトさせる
 @jit('Tuple((f8,f8))(f8,f8)', nopython=True, fastmath=True)
-def init_shift(r0, phiJ0):
+def dshift(mcolatr, mlongr):
     # ビンの中心からのずれ量 shapeは(ny,nx)
-    r_shift = d_r*(2*np.random.rand() - 1)
-    phiJ_shift = d_phiJ*(2*np.random.rand() - 1)
+    colatshift = d_colat*(2*np.random.rand() - 1)
+    longshift = d_long*(2*np.random.rand() - 1)
 
     # ビンの中心からずらした新しい座標
-    r0 += r_shift
-    phiJ0 += phiJ_shift
+    mcolatr += colatshift
+    mlongr += longshift
 
-    x0 = r0*np.cos(phiJ0) - R0x
-    y0 = r0*np.sin(phiJ0) - R0y
+    return mcolatr, mlongr
 
-    return x0, y0
+
+#
+#
+# %% ピッチ角をシフトさせる
+@jit('f8(f8)', nopython=True, fastmath=True)
+def ashift(a):
+    # ビンの中心からのずれ量 shapeは(ny,nx)
+    da = d_alpha*(2*np.random.rand() - 1)
+
+    # ピッチ角の代表値からずらした新しいピッチ角
+    a += da
+
+    return a
 
 
 #
@@ -646,59 +618,123 @@ def rk4(RV0, tsize, TC):
             # print('Loss')
             break
 
+        # 北側しきい値
         if (RV[2] < z_p) and (RV2[2] > z_p):
             # print('UPPER')
             RV2 = comeback(RV2, req, z_p_rad, K0)
 
-        # 磁気赤道面への到達
-        # if (RV[2] < 0) and (RV2[2] > 0):
-        #     print('South to Equator: ', t, 'sec')
-        #     break
+        # 南側しきい値
+        if (RV[2] > z_m) and (RV2[2] < z_m):
+            # print('LOWER')
+            RV2 = comeback(RV2, req, z_m_rad, K0)
 
-        # 磁気赤道面への到達 North to Equator
+        # 磁気赤道面到達 (N → S)
         if (RV[2] > 0) and (RV2[2] < 0):
-            Rvec = 0.5*(RV[0:3] + RV2[0:3]) + R0vec
+            mphiR = math.atan2(Rvec[1], Rvec[0])    # 磁気経度
             # DEPLETION領域かどうか
-            mphiR = math.atan2(Rvec[1], Rvec[0])
             # IN THE DEPLETION REGION
             if (mphiR < mphi_leading) & (mphiR > mphi_trailing):
-                omg = omgR2
-            # OUT OF THE DEPLETION REGION
-            else:
+                # Gyro period
+                TC = 2*np.pi*me/(-e*Babs(Rvec))
+                # print('TC: ', TC)
+
+                # 時間刻みの更新
+                dt = FORWARD_BACKWARD*20*TC
+                dt2 = 0.5*dt
+
+                # 座標と時刻更新
+                RV = RV2
+                t += dt
+                continue
+            else:   # OUT OF
+                # print('North to south')
                 omg = omgR
 
-            # print('North to Equator: ', t,  'sec')
-            bvec = Bfield(Rvec)/Babs(Rvec)
-            Vdvec = Vdvector(omg, Rvec)
-            Vdpara = vecdot(bvec, Vdvec)
-            Vdperp = math.sqrt(Vdvec[0]**2 + Vdvec[1]
-                               ** 2 + Vdvec[2]**2 - Vdpara**2)
-            vperp = math.sqrt(
-                2*K0/me - (RV[3]-Vdpara)**2 + (Rho(Rvec)*omgR)**2) - Vdperp
-            vparallel = RV[3] - Vdpara
-            Vnorm = math.sqrt(vparallel**2 + vperp**2)
-            alpha_end = math.atan2(vperp, -vparallel)   # RADIANS
-            energy_end = me*0.5*(Vnorm**2)/float(1.602E-19)
+                bvec = Bfield(Rvec)/Babs(Rvec)
+                Vdvec = Vdvector(omg, Rvec)
+                Vdpara = vecdot(bvec, Vdvec)
+                Vdperp = math.sqrt(Vdvec[0]**2 + Vdvec[1]**2
+                                   + Vdvec[2]**2 - Vdpara**2)
+                vperp = math.sqrt(
+                    2*K0/me - (RV[3]-Vdpara)**2 + (Rho(Rvec)*omgR)**2) - Vdperp
+                vparallel = RV[3] - Vdpara
+                Vnorm = math.sqrt(vparallel**2 + vperp**2)
+                alpha_end = math.atan2(vperp, -vparallel)   # RADIANS
+                energy_end = me*0.5*(Vnorm**2)/float(1.602E-19)
 
-            K1 = 0.5*me*((vparallel)**2 -
-                         (Rho(Rvec)*omgR)**2 + (vperp+Vdperp)**2)
-            # print('alpha_end [degrees]: ', math.degrees(alpha_end))
-            # print('energy_end [eV]: ', energy_end)
-            print('K1/K0: ', K1/K0)
+                # K1 = 0.5*me*((vparallel)**2 -
+                #             (Rho(Rvec)*omgR)**2 + (vperp+Vdperp)**2)
+                # print('alpha_end [degrees]: ', math.degrees(alpha_end))
+                # print('energy_end [eV]: ', energy_end)
+                # print('K1/K0: ', K1/K0)
 
-            # 座標配列
-            # trace[0] ... 終点 x座標
-            # trace[1] ... 終点 y座標
-            # trace[2] ... 終点 z座標
-            # trace[3] ... yn
-            # trace[4] ... 終点 energy [eV]
-            # trace[5] ... 終点 alpha_eq [RADIANS]
-            trace[0:3] = RV[0:3]
-            trace[3] = energy_end
-            trace[4] = alpha_end
-            trace[5] = yn
+                # 座標配列
+                # trace[0] ... 終点 x座標
+                # trace[1] ... 終点 y座標
+                # trace[2] ... 終点 z座標
+                # trace[3] ... yn
+                # trace[4] ... 終点 energy [eV]
+                # trace[5] ... 終点 alpha_eq [RADIANS]
+                trace[0:3] = RV[0:3]
+                trace[3] = energy_end
+                trace[4] = alpha_end
+                trace[5] = yn
 
-            break
+                break
+
+        # 磁気赤道面到達 (S → N)
+        if (RV[2] < 0) and (RV2[2] > 0):
+            mphiR = math.atan2(Rvec[1], Rvec[0])    # 磁気経度
+            # DEPLETION領域かどうか
+            # IN THE DEPLETION REGION
+            if (mphiR < mphi_leading) & (mphiR > mphi_trailing):
+                # Gyro period
+                TC = 2*np.pi*me/(-e*Babs(Rvec))
+                # print('TC: ', TC)
+
+                # 時間刻みの更新
+                dt = FORWARD_BACKWARD*20*TC
+                dt2 = 0.5*dt
+
+                # 座標と時刻更新
+                RV = RV2
+                t += dt
+                continue
+            else:   # OUT OF
+                # print('South to north')
+                omg = omgR
+
+                bvec = Bfield(Rvec)/Babs(Rvec)
+                Vdvec = Vdvector(omg, Rvec)
+                Vdpara = vecdot(bvec, Vdvec)
+                Vdperp = math.sqrt(Vdvec[0]**2 + Vdvec[1]**2
+                                   + Vdvec[2]**2 - Vdpara**2)
+                vperp = math.sqrt(
+                    2*K0/me - (RV[3]-Vdpara)**2 + (Rho(Rvec)*omgR)**2) - Vdperp
+                vparallel = RV[3] - Vdpara
+                Vnorm = math.sqrt(vparallel**2 + vperp**2)
+                alpha_end = math.atan2(vperp, -vparallel)   # RADIANS
+                energy_end = me*0.5*(Vnorm**2)/float(1.602E-19)
+
+                # K1 = 0.5*me*((vparallel)**2 -
+                #             (Rho(Rvec)*omgR)**2 + (vperp+Vdperp)**2)
+                # print('alpha_end [degrees]: ', math.degrees(alpha_end))
+                # print('energy_end [eV]: ', energy_end)
+                # print('K1/K0: ', K1/K0)
+
+                # 座標配列
+                # trace[0] ... 終点 x座標
+                # trace[1] ... 終点 y座標
+                # trace[2] ... 終点 z座標
+                # trace[3] ... yn
+                # trace[4] ... 終点 energy [eV]
+                # trace[5] ... 終点 alpha_eq [RADIANS]
+                trace[0:3] = RV[0:3]
+                trace[3] = yn
+                trace[4] = energy_end
+                trace[5] = alpha_end
+
+                break
 
         # Gyro period
         TC = 2*np.pi*me/(-e*Babs(Rvec))
@@ -736,23 +772,6 @@ def calc(mcolatr, mlongr):
     with objmode(start0='f8'):
         start0 = time.perf_counter()
 
-    Rinitvec = np.array([
-        RE*math.sin(mcolatr)*math.cos(mlongr),
-        RE*math.sin(mcolatr)*math.sin(mlongr),
-        RE*math.cos(mcolatr)
-    ])
-
-    # 表面法線ベクトル
-    nvec = Rinitvec / \
-        math.sqrt(Rinitvec[0]**2 + Rinitvec[1]**2 + Rinitvec[2]**2)
-
-    # TRACE座標系に
-    Rinitvec = np.array([
-        Rinitvec[0] + eurx,
-        Rinitvec[1] + eury,
-        Rinitvec[2] + eurz
-    ])
-
     # result[:, 0] ... 出発点 x座標
     # result[:, 1] ... 出発点 y座標
     # result[:, 2] ... 出発点 z座標
@@ -765,21 +784,42 @@ def calc(mcolatr, mlongr):
     # result[:, 9] ... 出発点 v_dot_n
     result = np.zeros((len(alpha_array), 10))
 
-    # 磁場と平行な単位ベクトル
-    B = Babs(Rinitvec + R0vec)
-    bvec = Bfield(Rinitvec + R0vec)/B
-
-    # 自転軸からの距離 rho (BACKTRACING)
-    rho = Rho(Rinitvec + R0vec)
-    Vdvec = Vdvector(omgR2, Rinitvec + R0vec)
-    Vdpara = bvec[0]*Vdvec[0] + bvec[1]*Vdvec[1] + bvec[2]*Vdvec[2]  # 平行成分
-
-    # Gyro Period
-    TC = 2*np.pi*me/(-e*B)
-
     # LOOP INDEX INITIALIZED
     i = 0
-    for alpha in alpha_array:
+    for alphar in alpha_array:
+        # ピッチ角をシフトさせる
+        alpha = ashift(alphar)
+
+        # 初期座標をシフトさせる
+        mcolat, mlong = dshift(mcolatr, mlongr)
+
+        # 表面法線ベクトル
+        nvec = np.array([
+            math.sin(mcolat)*math.cos(mlong),
+            math.sin(mcolat)*math.sin(mlong),
+            math.cos(mcolat)
+        ])
+
+        # 表面ベクトル
+        Rinitvec = RE*nvec
+
+        # TRACE座標系に
+        Rinitvec = np.array(
+            [Rinitvec[0]+eurx, Rinitvec[1]+eury, Rinitvec[2]+eurz])
+
+        # 磁場と平行な単位ベクトル
+        B = Babs(Rinitvec + R0vec)
+        bvec = Bfield(Rinitvec + R0vec)/B
+
+        # 自転軸からの距離 rho (BACKTRACING)
+        rho = Rho(Rinitvec + R0vec)
+        Vdvec = Vdvector(omgR2, Rinitvec + R0vec)
+        Vdpara = bvec[0]*Vdvec[0] + bvec[1]*Vdvec[1] + bvec[2]*Vdvec[2]  # 平行成分
+
+        # Gyro Period
+        TC = 2*np.pi*me/(-e*B)
+        # print('TC [sec]: ', TC)
+
         beta = 2*np.pi*np.random.rand()
         V0vec = V0*np.array([
             math.sin(alpha)*math.cos(beta),
@@ -791,7 +831,7 @@ def calc(mcolatr, mlongr):
         vdotn = vecdot(nvec, V0vec)
 
         # 自転軸からの距離 rho (BACKTRACING)
-        K0 = 0.5*me*((vparallel - Vdpara)**2 - (rho*omgR2)**2 + vperp**2)
+        K0 = 0.5*me*((vparallel-Vdpara)**2 - (rho*omgR2)**2 + vperp**2)
 
         # 初期座標&初期速度ベクトルの配列
         # RV0vec[0] ... x座標
@@ -840,32 +880,23 @@ tsize = int(t_len/dt)
 #
 # %% main関数
 def main():
-    # Europa表面の初期座標
-    ncolat = 50  # 分割数
-    nphi = 100    # 分割数
-    meshlong, meshcolat = np.meshgrid(
-        np.radians(np.linspace(0, 360, nphi)),
-        np.radians(np.linspace(0, 180, ncolat))
-    )
-    # meshlong: 経度
-    # meshcolat: 余緯度
-
-    mcolatr = meshcolat.reshape(meshcolat.size)  # 1次元化
-    mlongr = meshlong.reshape(meshlong.size)  # 1次元化
-
     # 情報表示
     print('alpha: {:>7d}'.format(alpha_array.size))
     print('ncolat: {:>7d}'.format(ncolat))
     print('nphi: {:>7d}'.format(nphi))
     print('total: {:>7d}'.format(alpha_array.size*ncolat*nphi))
-    # print(savename)
+    print(savename)
+
+    # 初期座標
+    mcolatr = meshcolat.reshape(meshcolat.size)  # 1次元化
+    mlongr = meshlong.reshape(meshlong.size)  # 1次元化
 
     # 並列計算用 変数リスト(zip)
     args = list(zip(mcolatr, mlongr))  # np.arrayは不可。ここが1次元なのでpoolの結果も1次元。
 
     # 並列計算の実行
     start = time.time()
-    with Pool(processes=1) as pool:
+    with Pool(processes=8) as pool:
         result_list = list(pool.starmap(calc, args))
     stop = time.time()
     print('%.3f seconds' % (stop - start))
@@ -891,11 +922,19 @@ def main():
     # Europaに衝突しない(yn=1)の粒子を取り出す
     yn1 = np.where(result[:, 6] == 1)  # 0でない行を見つける(検索は表面yn=6列目)
     mageq = result[yn1]  # 0でない行だけ取り出し
+    print(mageq)
 
     """
+    # SAVE(LOCAL)
     np.savetxt(
-    '/Users/shin/Documents/Research/Europa/Codes/gyrocenter/gyrocenter_1/' +
-    str(savename_f), trace
+        '/Users/shin/Documents/Research/Europa/Codes/gyrocenter/gyrocenter_2/' +
+        str(savename), mageq
+    )
+
+    # SAVE(iCloud)
+    np.savetxt(
+        '/Users/shin/Library/Mobile Documents/com~apple~CloudDocs/PPARC/' +
+        str(savename), mageq
     )
     """
 
@@ -904,9 +943,8 @@ def main():
     print('ncolat: {:>7d}'.format(ncolat))
     print('nphi: {:>7d}'.format(nphi))
     print('total: {:>7d}'.format(alpha_array.size*ncolat*nphi))
-
     print('magnetic equator: {:>7d}'.format(mageq[:, 0].size))
-    # print(savename)
+    print(savename)
 
     return 0
 
