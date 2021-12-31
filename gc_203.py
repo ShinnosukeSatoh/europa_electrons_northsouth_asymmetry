@@ -48,15 +48,9 @@ FORWARD_BACKWARD = -1  # 1=FORWARD, -1=BACKWARD
 
 #
 #
-# %% 座標保存の間隔(hステップに1回保存する)
-h = int(500)
-
-
-#
-#
 # %% SETTINGS FOR THE NEXT EXECUTION
-energy = 1000  # eV
-savename = 'gc203_1000ev_20211231_1.txt'
+energy = 5000  # eV
+savename = 'gc203_100ev_20211231_1.txt'
 
 
 #
@@ -102,6 +96,7 @@ lam = 10.0
 L96 = 9.6*RJ  # Europa公転軌道 L値
 
 # 木星とtrace座標系原点の距離(x軸の定義)
+# Europaの中心を通る磁力線の脚(磁気赤道面)
 R0 = L96*(np.cos(np.radians(lam)))**(-2)
 R0x = R0
 R0y = 0
@@ -133,7 +128,7 @@ mphi_trailing = math.atan2(eury+R0y-depletionR, eurx+R0x)    # 後行半球中�
 #
 # %% 初期位置エリア(z=0)での速度ベクトル (つまり磁気赤道面でのピッチ角)
 V0 = math.sqrt((energy/me)*2*float(1.602E-19))
-pitch = int(25)  # 0-90度を何分割するか
+pitch = int(50)  # 0-90度を何分割するか
 alphaeq0 = np.radians(np.linspace(0.1, 89.91, int(pitch+1)))   # PITCH ANGLE
 a0c = (alphaeq0[1:] + alphaeq0[:-1])/2
 alphaeq1 = np.radians(np.linspace(90.09, 179.9, int(pitch+1)))   # PITCH ANGLE
@@ -145,8 +140,8 @@ d_alpha = np.abs(alpha_array[1]-alpha_array[0])
 #
 #
 # %% Europa表面の初期座標
-ncolat = 10  # 分割数
-nphi = 20    # 分割数
+ncolat = 25  # 分割数
+nphi = 50    # 分割数
 long_array = np.radians(np.linspace(0, 360, nphi+1))
 colat_array = np.radians(np.linspace(0, 180, ncolat+1))
 # 動径方向の中点
@@ -607,16 +602,16 @@ def rk4(RV0, tsize, TC):
         r_eur = math.sqrt((RV2[0]-eurx)**2 + (RV2[1]-eury)
                           ** 2 + (RV2[2]-eurz)**2)
         if r_eur < RE:
-            yn = 0
+            # yn = 0
             # print('Collide')
             break
 
         # 木星に衝突
-        r_jovi = math.sqrt(Rvec[0]**2 + Rvec[1]**2 + Rvec[2]**2)
-        if r_jovi < RJ:
-            yn = 0
-            # print('Loss')
-            break
+        # r_jovi = math.sqrt(Rvec[0]**2 + Rvec[1]**2 + Rvec[2]**2)
+        # if r_jovi < RJ:
+        #     yn = 0
+        #     # print('Loss')
+        #     break
 
         # 北側しきい値
         if (RV[2] < z_p) and (RV2[2] > z_p):
@@ -676,9 +671,9 @@ def rk4(RV0, tsize, TC):
                 # trace[4] ... 終点 energy [eV]
                 # trace[5] ... 終点 alpha_eq [RADIANS]
                 trace[0:3] = RV[0:3]
-                trace[3] = energy_end
-                trace[4] = alpha_end
-                trace[5] = yn
+                trace[3] = yn
+                trace[4] = energy_end
+                trace[5] = alpha_end
 
                 break
 
@@ -800,12 +795,29 @@ def calc(mcolatr, mlongr):
             math.cos(mcolat)
         ])
 
+        # 法線ベクトルの回転
+        nvec = np.array([
+            nvec[0]*math.cos(math.radians(-lam))+nvec[2] *
+            math.sin(math.radians(-lam)),
+            nvec[1],
+            -nvec[0]*math.sin(math.radians(-lam))+nvec[2] *
+            math.cos(math.radians(-lam))
+        ])
+
         # 表面ベクトル
         Rinitvec = RE*nvec
 
-        # TRACE座標系に
-        Rinitvec = np.array(
-            [Rinitvec[0]+eurx, Rinitvec[1]+eury, Rinitvec[2]+eurz])
+        # Trace座標系に
+        Rinitvec = Rinitvec + np.array([eurx, eury, eurz])
+
+        # 速度ベクトル V0vec
+        beta = 2*np.pi*np.random.rand()
+        V0vec = V0*np.array([
+            math.sin(alpha)*math.cos(beta),
+            math.sin(alpha)*math.sin(beta),
+            math.cos(alpha)
+        ])
+        vdotn = vecdot(nvec, V0vec)
 
         # 磁場と平行な単位ベクトル
         B = Babs(Rinitvec + R0vec)
@@ -820,15 +832,8 @@ def calc(mcolatr, mlongr):
         TC = 2*np.pi*me/(-e*B)
         # print('TC [sec]: ', TC)
 
-        beta = 2*np.pi*np.random.rand()
-        V0vec = V0*np.array([
-            math.sin(alpha)*math.cos(beta),
-            math.sin(alpha)*math.sin(beta),
-            math.cos(alpha)
-        ])
         vparallel = vecdot(bvec, V0vec)
         vperp = math.sqrt(V0**2 - vparallel**2)
-        vdotn = vecdot(nvec, V0vec)
 
         # 自転軸からの距離 rho (BACKTRACING)
         K0 = 0.5*me*((vparallel-Vdpara)**2 - (rho*omgR2)**2 + vperp**2)
@@ -922,9 +927,8 @@ def main():
     # Europaに衝突しない(yn=1)の粒子を取り出す
     yn1 = np.where(result[:, 6] == 1)  # 0でない行を見つける(検索は表面yn=6列目)
     mageq = result[yn1]  # 0でない行だけ取り出し
-    print(mageq)
+    # print(mageq)
 
-    """
     # SAVE(LOCAL)
     np.savetxt(
         '/Users/shin/Documents/Research/Europa/Codes/gyrocenter/gyrocenter_2/' +
@@ -936,7 +940,6 @@ def main():
         '/Users/shin/Library/Mobile Documents/com~apple~CloudDocs/PPARC/' +
         str(savename), mageq
     )
-    """
 
     # 情報表示
     print('alpha: {:>7d}'.format(alpha_array.size))
