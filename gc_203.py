@@ -813,8 +813,8 @@ def calc(mcolatr, mlongr):
             math.cos(math.radians(-lam))
         ])
 
-        # 表面ベクトル
-        Rinitvec = RE*nvec
+        # 表面ベクトル(Europa表面から10km上空にしてみる)
+        Rinitvec = (RE + 1E+4)*nvec
 
         # Trace座標系に
         Rinitvec = Rinitvec + np.array([eurx, eury, eurz])
