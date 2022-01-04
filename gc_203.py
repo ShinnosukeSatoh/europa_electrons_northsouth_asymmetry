@@ -21,6 +21,15 @@ a perpendicular term.
 This program is fully functional in both a forward-in-time tracing
 and a backward-in-time tracing. WELL DONE!
 
+Additional description on Jan 4 2022:
+The first abiadic invariant is NOT conserved throughout half the 
+bounce motion along the field line. The kinetic energy K0 defined
+as
+
+    K = (1/2)*m*(v// - vd//)^2 + (1/2)*m*(rho*omega)^2 + (1/2)*m*vperp^2
+
+is the invariant for the motion with a centrifugal force.
+
 """
 
 
@@ -49,8 +58,8 @@ FORWARD_BACKWARD = -1  # 1=FORWARD, -1=BACKWARD
 #
 #
 # %% SETTINGS FOR THE NEXT EXECUTION
-energy = 5000  # eV
-savename = 'gc203_100ev_20211231_1.txt'
+energy = 10000  # eV
+savename = 'gc203_10000ev_20220101_1.txt'
 
 
 #
@@ -128,20 +137,20 @@ mphi_trailing = math.atan2(eury+R0y-depletionR, eurx+R0x)    # 後行半球中�
 #
 # %% 初期位置エリア(z=0)での速度ベクトル (つまり磁気赤道面でのピッチ角)
 V0 = math.sqrt((energy/me)*2*float(1.602E-19))
-pitch = int(50)  # 0-90度を何分割するか
-alphaeq0 = np.radians(np.linspace(0.1, 89.91, int(pitch+1)))   # PITCH ANGLE
-a0c = (alphaeq0[1:] + alphaeq0[:-1])/2
-alphaeq1 = np.radians(np.linspace(90.09, 179.9, int(pitch+1)))   # PITCH ANGLE
-a1c = (alphaeq1[1:] + alphaeq1[:-1])/2
-alpha_array = np.hstack([a0c, a1c])
+pitch = int(120)  # 0-90度を何分割するか
+alphaeq0 = np.radians(np.linspace(0.1, 179.9, int(pitch+1)))   # PITCH ANGLE
+a0c = (alphaeq0[1:] + alphaeq0[:-1])/2  # the middle values
+# alphaeq1 = np.radians(np.linspace(90.0, 179.9, int(pitch+1)))   # PITCH ANGLE
+# a1c = (alphaeq1[1:] + alphaeq1[:-1])/2
+alpha_array = a0c
 d_alpha = np.abs(alpha_array[1]-alpha_array[0])
 
 
 #
 #
 # %% Europa表面の初期座標
-ncolat = 25  # 分割数
-nphi = 50    # 分割数
+ncolat = 30  # 分割数
+nphi = 60    # 分割数
 long_array = np.radians(np.linspace(0, 360, nphi+1))
 colat_array = np.radians(np.linspace(0, 180, ncolat+1))
 # 動径方向の中点
@@ -835,7 +844,7 @@ def calc(mcolatr, mlongr):
         vparallel = vecdot(bvec, V0vec)
         vperp = math.sqrt(V0**2 - vparallel**2)
 
-        # 自転軸からの距離 rho (BACKTRACING)
+        # 保存量 K0 (運動エネルギー)
         K0 = 0.5*me*((vparallel-Vdpara)**2 - (rho*omgR2)**2 + vperp**2)
 
         # 初期座標&初期速度ベクトルの配列
@@ -865,6 +874,9 @@ def calc(mcolatr, mlongr):
         result[i, 3:9] = runge
         result[i, 9] = vdotn
         i += 1
+
+    # yn1 = np.where(result[:, 6] == 1)  # 0でない行を見つける(検索は表面yn=6列目)
+    # result2 = result[yn1]
 
     with objmode():
         print('A BIN DONE [sec]: ',  (time.perf_counter() - start0))
@@ -909,8 +921,8 @@ def main():
     # 返り値(配列 *行8列)
     # 結果をreshape
     result = np.array(result_list)
-    result = result.reshape([int(alpha_array.size*ncolat*nphi), 10])
-    print(result.shape)
+    result = result.reshape([alpha_array.size*ncolat*nphi, 10])
+    # print(result.shape)
     # print(trace)
 
     # result[:, 0] ... 出発点 x座標
@@ -922,7 +934,7 @@ def main():
     # result[:, 6] ... yn
     # result[:, 7] ... 終点 energy [eV]
     # result[:, 8] ... 終点 alpha_eq [RADIANS]
-    # result[:, 9] ... 出発点 v_dot_n
+    # result[:, 9] ... 出発点 v_dot_n [m/s]
 
     # Europaに衝突しない(yn=1)の粒子を取り出す
     yn1 = np.where(result[:, 6] == 1)  # 0でない行を見つける(検索は表面yn=6列目)
@@ -946,7 +958,7 @@ def main():
     print('ncolat: {:>7d}'.format(ncolat))
     print('nphi: {:>7d}'.format(nphi))
     print('total: {:>7d}'.format(alpha_array.size*ncolat*nphi))
-    print('magnetic equator: {:>7d}'.format(mageq[:, 0].size))
+    # print('magnetic equator: {:>7d}'.format(mageq.shape))
     print(savename)
 
     return 0
