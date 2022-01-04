@@ -580,7 +580,7 @@ def rk4(RV0, tsize, TC):
 
     # トレース開始
     RV = RV0[0:4]
-    dt = FORWARD_BACKWARD*20*TC
+    dt = FORWARD_BACKWARD*10*TC
     dt2 = dt*0.5
 
     # 座標配列
@@ -643,7 +643,7 @@ def rk4(RV0, tsize, TC):
                 # print('TC: ', TC)
 
                 # 時間刻みの更新
-                dt = FORWARD_BACKWARD*20*TC
+                dt = FORWARD_BACKWARD*10*TC
                 dt2 = 0.5*dt
 
                 # 座標と時刻更新
@@ -697,7 +697,7 @@ def rk4(RV0, tsize, TC):
                 # print('TC: ', TC)
 
                 # 時間刻みの更新
-                dt = FORWARD_BACKWARD*20*TC
+                dt = FORWARD_BACKWARD*10*TC
                 dt2 = 0.5*dt
 
                 # 座標と時刻更新
@@ -745,7 +745,7 @@ def rk4(RV0, tsize, TC):
         # print('TC: ', TC)
 
         # 時間刻みの更新
-        dt = FORWARD_BACKWARD*20*TC
+        dt = FORWARD_BACKWARD*10*TC
         dt2 = 0.5*dt
 
         # 座標と時刻更新
