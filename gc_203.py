@@ -59,7 +59,7 @@ FORWARD_BACKWARD = -1  # 1=FORWARD, -1=BACKWARD
 #
 # %% SETTINGS FOR THE NEXT EXECUTION
 energy = 10000  # eV
-savename = 'gc203_10000ev_20220101_1.txt'
+savename = 'gc203_10000ev_20220101_2.txt'
 
 
 #
@@ -580,7 +580,7 @@ def rk4(RV0, tsize, TC):
 
     # トレース開始
     RV = RV0[0:4]
-    dt = FORWARD_BACKWARD*10*TC
+    dt = FORWARD_BACKWARD*TC
     dt2 = dt*0.5
 
     # 座標配列
@@ -615,6 +615,21 @@ def rk4(RV0, tsize, TC):
             # print('Collide')
             break
 
+        # Gyro period
+        TC = 2*np.pi*me/(-e*Babs(Rvec))
+        # Europaの近く
+        if r_eur < 1.05*RE:
+            # 時間刻みの更新
+            dt = FORWARD_BACKWARD*TC
+        else:
+            # 時間刻みの更新
+            dt = FORWARD_BACKWARD*25*TC
+        # 時間刻みの更新
+        dt2 = 0.5*dt
+
+        # 時刻更新
+        t += dt
+
         # 木星に衝突
         # r_jovi = math.sqrt(Rvec[0]**2 + Rvec[1]**2 + Rvec[2]**2)
         # if r_jovi < RJ:
@@ -638,17 +653,8 @@ def rk4(RV0, tsize, TC):
             # DEPLETION領域かどうか
             # IN THE DEPLETION REGION
             if (mphiR < mphi_leading) & (mphiR > mphi_trailing):
-                # Gyro period
-                TC = 2*np.pi*me/(-e*Babs(Rvec))
-                # print('TC: ', TC)
-
-                # 時間刻みの更新
-                dt = FORWARD_BACKWARD*10*TC
-                dt2 = 0.5*dt
-
-                # 座標と時刻更新
+                # 座標更新
                 RV = RV2
-                t += dt
                 continue
             else:   # OUT OF
                 # print('North to south')
@@ -692,17 +698,8 @@ def rk4(RV0, tsize, TC):
             # DEPLETION領域かどうか
             # IN THE DEPLETION REGION
             if (mphiR < mphi_leading) & (mphiR > mphi_trailing):
-                # Gyro period
-                TC = 2*np.pi*me/(-e*Babs(Rvec))
-                # print('TC: ', TC)
-
-                # 時間刻みの更新
-                dt = FORWARD_BACKWARD*10*TC
-                dt2 = 0.5*dt
-
-                # 座標と時刻更新
+                # 座標更新
                 RV = RV2
-                t += dt
                 continue
             else:   # OUT OF
                 # print('South to north')
@@ -740,17 +737,8 @@ def rk4(RV0, tsize, TC):
 
                 break
 
-        # Gyro period
-        TC = 2*np.pi*me/(-e*Babs(Rvec))
-        # print('TC: ', TC)
-
-        # 時間刻みの更新
-        dt = FORWARD_BACKWARD*10*TC
-        dt2 = 0.5*dt
-
-        # 座標と時刻更新
+        # 座標更新
         RV = RV2
-        t += dt
 
         if abs(t) > 5000:
             break
@@ -814,7 +802,7 @@ def calc(mcolatr, mlongr):
         ])
 
         # 表面ベクトル(Europa表面から10km上空にしてみる)
-        Rinitvec = (RE + 1E+4)*nvec
+        Rinitvec = (RE)*nvec
 
         # Trace座標系に
         Rinitvec = Rinitvec + np.array([eurx, eury, eurz])
