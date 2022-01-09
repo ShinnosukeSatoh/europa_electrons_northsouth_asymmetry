@@ -1,6 +1,6 @@
-""" gc_203.py
+""" gc_206.py
 
-Created on Sun Dec 27 16:07:00 2021
+Created on Sun Jan 9 13:40:00 2021
 @author: Shin Satoh
 
 Description:
@@ -58,8 +58,8 @@ FORWARD_BACKWARD = -1  # 1=FORWARD, -1=BACKWARD
 #
 #
 # %% SETTINGS FOR THE NEXT EXECUTION
-energy = 100  # eV
-savename = 'gc203_100ev_20220101_3.txt'
+energy = 2500  # eV
+savename = 'gc206_1000ev_20220109_1.txt'
 
 
 #
@@ -128,7 +128,7 @@ z_m_rad = math.radians(2.0)      # 南側
 z_m = -R0*math.cos(z_m_rad)**2 * math.sin(z_m_rad)
 
 # DEPLETION領域
-depletionR = 1.05*RE  # 円筒の半径
+depletionR = 1.06*RE  # 円筒の半径
 mphi_leading = math.atan2(eury+R0y+depletionR, eurx+R0x)     # 先行半球中心の磁気経度
 mphi_trailing = math.atan2(eury+R0y-depletionR, eurx+R0x)    # 後行半球中心の磁気経度
 
@@ -475,11 +475,60 @@ def comeback(RV2, req, lam0, K0):
 
 #
 #
+# %% ジャイロをフルに解く運動方程式(DEPLETION領域なので遠心力は省略...)
+@jit('f8[:](f8[:],f8)', nopython=True, fastmath=True)
+def eom(rv, t):
+    """
+    `rv` ... <ndarray> trace座標系 \\
+    `t` ... 時刻 \\
+    `K0` ... 保存量
+    """
+    # rv.shape >>> (6,)
+    # 座標系 = Europa中心の静止系
+    # rv[0] ... x of gyro motion
+    # rv[1] ... y
+    # rv[2] ... z
+    # rv[3] ... vx
+    # rv[4] ... vy
+    # rv[5] ... vz
+
+    # 木星原点の位置ベクトルに変換
+    rvec = rv[0:3] + R0vec  # 座標
+    vvec = rv[3:6]          # 速度
+
+    # Magnetic Field
+    Bvec = Bfield(rvec)   # 磁場ベクトル
+
+    # ローレンツ力
+    Lorentz = A1*np.array([
+        vvec[1]*Bvec[2] - vvec[2]*Bvec[1],
+        vvec[2]*Bvec[0] - vvec[0]*Bvec[2],
+        vvec[0]*Bvec[1] - vvec[1]*Bvec[0]
+    ])
+
+    # 共回転速度ベクトル
+    vdvec = Vdvector(omgR2, rvec)
+
+    # 運動方程式array
+    eom = np.array([
+        vvec[0]+vdvec[0],
+        vvec[1]+vdvec[1],
+        vvec[2]+vdvec[2],
+        Lorentz[0],
+        Lorentz[1],
+        Lorentz[2],
+    ])
+
+    return eom
+
+
+#
+#
 # %% 回転中心位置ベクトルRについての運動方程式(eq.8 on Northrop and Birmingham, 1982)
 @jit('f8[:](f8[:],f8, f8)', nopython=True, fastmath=True)
 def ode2(RV, t, K0):
     """
-    `RV2` ... <ndarray> trace座標系 \\
+    `RV` ... <ndarray> trace座標系 \\
     `t` ... 時刻 \\
     `K0` ... 保存量
     """
@@ -551,39 +600,44 @@ def ode2(RV, t, K0):
 #
 # %% 4次ルンゲクッタ.. functionの定義
 @jit('f8[:](f8[:],f8, f8)', nopython=True, fastmath=True)
-def rk4(RV0, tsize, TC):
+def rk4(rv0, tsize, TC):
     """
-    `RV0` ... <ndarray> trace座標系 \\
+    `rv0` ... <ndarray> trace座標系 \\
     `tsize` ... 時刻tのサイズ \\
     `TC` ... サイクロトロン周期 [s] \\
     Details follow: \\
-    `RV0.shape` ... (6,) \\
-    `RV0[0]` ... x of Guiding Center \\
-    `RV0[1]` ... y \\
-    `RV0[2]` ... z \\
-    `RV0[3]` ... v parallel \\
-    `RV0[4]` ... K0 (保存量)
+    `RV0.shape` ... (7,) \\
+    `rv0[0]` ... x of Guiding Center \\
+    `rv0[1]` ... y \\
+    `rv0[2]` ... z \\
+    `rv0[3]` ... vx \\
+    `rv0[4]` ... vy \\
+    `rv0[5]` ... vz \\
+    `rv0[6]` ... K0 (保存量)
     """
 
     # 時刻初期化
     t = 0
 
     # K0 保存量
-    K0 = RV0[4]
+    K0 = rv0[6]
 
     # 木星原点の位置ベクトルに変換
-    Rvec = RV0[0:3] + R0vec
+    rvec = rv0[0:3] + R0vec
+
+    # ジャイロ半径
+    # rgyro = me*math.sqrt(rv0[3]**2 + rv0[4]**2 + rv0[5]**2)/(-e*Babs(rvec))
 
     # ダイポールからの距離(@磁気赤道面 近似)
-    r = math.sqrt(Rvec[0]**2 + Rvec[1]**2 + Rvec[2]**2)
+    r = math.sqrt(rvec[0]**2 + rvec[1]**2 + rvec[2]**2)
     req = r/(math.cos(lam)**2)
 
     # トレース開始
-    RV = RV0[0:4]
-    dt = FORWARD_BACKWARD*TC
-    dt2 = dt*0.5
+    rv = rv0[0:6]
+    dt = FORWARD_BACKWARD*(6E-7)
+    dt2 = 0.5*dt
 
-    # 座標配列
+    # return座標配列
     # trace[0] ... 終点 x座標
     # trace[1] ... 終点 y座標
     # trace[2] ... 終点 z座標
@@ -595,9 +649,75 @@ def rk4(RV0, tsize, TC):
     # 有効な粒子か
     yn = 1  # 1...有効
 
-    # ルンゲクッタ
-    # print('RK4 START')
+    # ジャイロを解くルンゲクッタ
+    k = 0   # INDEX INITIALIZED
     for k in range(tsize-1):
+        f1 = eom(rv, t)
+        f2 = eom(rv+dt2*f1, t+dt2)
+        f3 = eom(rv+dt2*f2, t+dt2)
+        f4 = eom(rv+dt*f3, t+dt)
+        rv2 = rv + dt*(f1 + 2*f2 + 2*f3 + f4)/6
+        t += dt
+
+        # Europaに再衝突
+        r_eur = math.sqrt((rv2[0]-eurx)**2 + (rv2[1]-eury)
+                          ** 2 + (rv2[2]-eurz)**2)
+
+        if r_eur < RE:
+            yn = 0
+            break
+
+        # Gyro period
+        rv = rv2
+        # Europaの近く(13km上空)
+        if r_eur < (RE+1.3E4):
+            continue
+        else:
+            break
+
+    # 速度ベクトル V0vec
+    V1vec = rv[3:6]
+    V12 = V1vec[0]**2 + V1vec[1]**2 + V1vec[2]**2
+
+    # 磁場と平行な単位ベクトル
+    rvec = rv[0:3]
+    B = Babs(rvec + R0vec)
+    bvec = Bfield(rvec + R0vec)/B
+
+    # 自転軸からの距離 rho (BACKTRACING)
+    rho = Rho(rvec + R0vec)
+    Vdvec = Vdvector(omgR2, rvec + R0vec)
+    Vdpara = bvec[0]*Vdvec[0] + bvec[1]*Vdvec[1] + bvec[2]*Vdvec[2]  # 平行成分
+
+    # Gyro Period
+    TC = 2*np.pi*me/(-e*B)
+    dt = FORWARD_BACKWARD*25*TC
+    dt2 = 0.5*dt
+
+    # 速度ベクトルを分解
+    vparallel = vecdot(bvec, V1vec)
+    vperp = math.sqrt(V12 - vparallel**2)
+
+    # 保存量 K0 (運動エネルギー)
+    K0 = 0.5*me*((vparallel-Vdpara)**2 - (rho*omgR2)**2 + vperp**2)
+
+    # 次のループへの変数
+    RV0vec = np.array([
+        rvec[0], rvec[1], rvec[2], vparallel, K0
+    ])
+
+    # 回転中心座標
+    RV = RV0vec[0:4]
+
+    # 回転中心を解くルンゲクッタ
+    k = 0   # INDEX INITIALIZED
+    for k in range(tsize-1):
+        # Europaに再衝突
+        r_eur = math.sqrt((RV[0]-eurx)**2 + (RV[1]-eury)
+                          ** 2 + (RV[2]-eurz)**2)
+        if r_eur < RE:
+            break
+
         F1 = ode2(RV, t, K0)
         F2 = ode2(RV+dt2*F1, t+dt2, K0)
         F3 = ode2(RV+dt2*F2, t+dt2, K0)
@@ -607,24 +727,9 @@ def rk4(RV0, tsize, TC):
         # 木星原点の位置ベクトルに変換
         Rvec = RV2[0:3] + R0vec
 
-        # Europaに再衝突
-        r_eur = math.sqrt((RV2[0]-eurx)**2 + (RV2[1]-eury)
-                          ** 2 + (RV2[2]-eurz)**2)
-        if r_eur < RE:
-            yn = 0
-            # print('Collide')
-            break
-
         # Gyro period
         TC = 2*np.pi*me/(-e*Babs(Rvec))
-        # Europaの近く
-        if r_eur < 1.05*RE:
-            # 時間刻みの更新
-            dt = FORWARD_BACKWARD*TC
-        else:
-            # 時間刻みの更新
-            dt = FORWARD_BACKWARD*25*TC
-        # 時間刻みの更新
+        dt = FORWARD_BACKWARD*25*TC
         dt2 = 0.5*dt
 
         # 時刻更新
@@ -802,7 +907,7 @@ def calc(mcolatr, mlongr):
         ])
 
         # 表面ベクトル(Europa表面から10km上空にしてみる)
-        Rinitvec = (RE)*nvec
+        Rinitvec = (RE+1E4)*nvec
 
         # Trace座標系に
         Rinitvec = Rinitvec + np.array([eurx, eury, eurz])
@@ -814,6 +919,16 @@ def calc(mcolatr, mlongr):
             math.sin(alpha)*math.sin(beta),
             math.cos(alpha)
         ])
+
+        # 速度ベクトルの回転
+        V0vec = np.array([
+            V0vec[0]*math.cos(math.radians(-lam))+V0vec[2] *
+            math.sin(math.radians(-lam)),
+            V0vec[1],
+            -V0vec[0]*math.sin(math.radians(-lam))+V0vec[2] *
+            math.cos(math.radians(-lam))
+        ])
+
         vdotn = vecdot(nvec, V0vec)
 
         # 磁場と平行な単位ベクトル
@@ -836,17 +951,25 @@ def calc(mcolatr, mlongr):
         K0 = 0.5*me*((vparallel-Vdpara)**2 - (rho*omgR2)**2 + vperp**2)
 
         # 初期座標&初期速度ベクトルの配列
-        # RV0vec[0] ... x座標
-        # RV0vec[1] ... y座標
-        # RV0vec[2] ... z座標
-        # RV0vec[3] ... v parallel
-        # RV0vec[4] ... K0 (保存量)
-        RV0vec = np.array([
-            Rinitvec[0], Rinitvec[1], Rinitvec[2], vparallel, K0
+        # rv0vec[0] ... x座標
+        # rv0vec[1] ... y座標
+        # rv0vec[2] ... z座標
+        # rv0vec[3] ... vx
+        # rv0vec[4] ... vy
+        # rv0vec[5] ... vz
+        # rv0vec[6] ... K0 (保存量)
+        rv0vec = np.array([
+            Rinitvec[0],
+            Rinitvec[1],
+            Rinitvec[2],
+            V0vec[0],
+            V0vec[1],
+            V0vec[2],
+            K0
         ])
 
         # TRACING
-        runge = rk4(RV0vec, tsize, TC)
+        runge = rk4(rv0vec, tsize, TC)
 
         # result[:, 0] ... 出発点 x座標
         # result[:, 1] ... 出発点 y座標

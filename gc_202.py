@@ -58,7 +58,7 @@ h = int(500)
 energy = 1000  # eV
 savename_f = 'go_1000ev_aeq60_20211230_1_forward.txt'
 savename_b = 'go_1000ev_aeq60_20211230_1_backward.txt'
-alphaeq = np.radians(90)   # PITCH ANGLE
+alphaeq = np.radians(60)   # PITCH ANGLE
 
 
 #
