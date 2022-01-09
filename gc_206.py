@@ -58,8 +58,8 @@ FORWARD_BACKWARD = -1  # 1=FORWARD, -1=BACKWARD
 #
 #
 # %% SETTINGS FOR THE NEXT EXECUTION
-energy = 2500  # eV
-savename = 'gc206_1000ev_20220109_1.txt'
+energy = 10  # eV
+savename = 'gc206_10ev_20220109_1.txt'
 
 
 #
@@ -128,7 +128,7 @@ z_m_rad = math.radians(2.0)      # 南側
 z_m = -R0*math.cos(z_m_rad)**2 * math.sin(z_m_rad)
 
 # DEPLETION領域
-depletionR = 1.06*RE  # 円筒の半径
+depletionR = 1.07*RE  # 円筒の半径
 mphi_leading = math.atan2(eury+R0y+depletionR, eurx+R0x)     # 先行半球中心の磁気経度
 mphi_trailing = math.atan2(eury+R0y-depletionR, eurx+R0x)    # 後行半球中心の磁気経度
 
@@ -669,8 +669,8 @@ def rk4(rv0, tsize, TC):
 
         # Gyro period
         rv = rv2
-        # Europaの近く(13km上空)
-        if r_eur < (RE+1.3E4):
+        # Europaの近く(23km上空)
+        if r_eur < (RE+2.3E4):
             continue
         else:
             break
@@ -906,8 +906,8 @@ def calc(mcolatr, mlongr):
             math.cos(math.radians(-lam))
         ])
 
-        # 表面ベクトル(Europa表面から10km上空にしてみる)
-        Rinitvec = (RE+1E4)*nvec
+        # 表面ベクトル(Europa表面から20km上空にしてみる)
+        Rinitvec = (RE+2E4)*nvec
 
         # Trace座標系に
         Rinitvec = Rinitvec + np.array([eurx, eury, eurz])
