@@ -22,7 +22,7 @@ This program is fully functional in both a forward-in-time tracing
 and a backward-in-time tracing. WELL DONE!
 
 Additional description on Jan 4 2022:
-The first abiadic invariant is NOT conserved throughout half the 
+The first abiadic invariant is NOT conserved throughout half the
 bounce motion along the field line. The kinetic energy K0 defined
 as
 
@@ -35,7 +35,7 @@ is the invariant for the motion with a centrifugal force.
 
 # %% ライブラリのインポート
 from numba import jit, f8, objmode
-from numba.experimental import jitclass
+# from numba.experimental import jitclass
 import numpy as np
 import math
 # import matplotlib.pyplot as plt
@@ -58,8 +58,8 @@ FORWARD_BACKWARD = -1  # 1=FORWARD, -1=BACKWARD
 #
 #
 # %% SETTINGS FOR THE NEXT EXECUTION
-energy = 10  # eV
-savename = 'gc203r_10ev_20220109_1.txt'
+energy = 70  # eV
+savename = 'gc203r_70ev_20220109_1.txt'
 
 
 #
@@ -84,7 +84,7 @@ omgR = omgJ-omgE        # 木星のEuropaに対する相対的な自転角速度
 eomg = np.array([-np.sin(np.radians(10.)),
                  0., np.cos(np.radians(10.))])
 omgRvec = omgR*eomg
-omgR2 = 0.1*omgR
+omgR2 = 0.1*omgR        # 0.1*omgR = 10300 m/s (at Europa's orbit)
 omgR2vec = omgR2*eomg
 
 
@@ -618,12 +618,12 @@ def rk4(RV0, tsize, TC):
         # Gyro period
         TC = 2*np.pi*me/(-e*Babs(Rvec))
         # Europaの近く
-        if r_eur < 1.05*RE:
+        if r_eur < 1.03*RE:
             # 時間刻みの更新
             dt = FORWARD_BACKWARD*TC
         else:
             # 時間刻みの更新
-            dt = FORWARD_BACKWARD*25*TC
+            dt = FORWARD_BACKWARD*30*TC
         # 時間刻みの更新
         dt2 = 0.5*dt
 

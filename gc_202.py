@@ -683,7 +683,7 @@ def rk4(RV0, tsize, TC):
         if k % h == 0:
             # 1ステップでどれくらい進んだか
             D = np.linalg.norm(RV2[0:3]-RV[0:3])
-            print(t, D)
+            print(D)
             trace[kk, :] = np.array([
                 RV2[0], RV2[1], RV2[2], RV2[3], K0
             ])

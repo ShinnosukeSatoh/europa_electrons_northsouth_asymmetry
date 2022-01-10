@@ -1,6 +1,6 @@
-""" gc_203.py
+""" gc_203_random.py
 
-Created on Sun Dec 27 16:07:00 2021
+Created on Sun Jan 9 22:32:00 2021
 @author: Shin Satoh
 
 Description:
@@ -59,7 +59,7 @@ FORWARD_BACKWARD = -1  # 1=FORWARD, -1=BACKWARD
 #
 # %% SETTINGS FOR THE NEXT EXECUTION
 energy = 100  # eV
-savename = 'gc203_100ev_20220101_3.txt'
+savename = 'gc203g_100ev_20220109_1.txt'
 
 
 #
@@ -84,7 +84,7 @@ omgR = omgJ-omgE        # 木星のEuropaに対する相対的な自転角速度
 eomg = np.array([-np.sin(np.radians(10.)),
                  0., np.cos(np.radians(10.))])
 omgRvec = omgR*eomg
-omgR2 = 0.1*omgR
+omgR2 = 0.1*omgR        # 0.1*omgR = 10300 m/s (at Europa's orbit)
 omgR2vec = omgR2*eomg
 
 
@@ -137,7 +137,7 @@ mphi_trailing = math.atan2(eury+R0y-depletionR, eurx+R0x)    # 後行半球中�
 #
 # %% 初期位置エリア(z=0)での速度ベクトル (つまり磁気赤道面でのピッチ角)
 V0 = math.sqrt((energy/me)*2*float(1.602E-19))
-pitch = int(120)  # 0-90度を何分割するか
+pitch = int(60)  # 0-90度を何分割するか
 alphaeq0 = np.radians(np.linspace(0.1, 179.9, int(pitch+1)))   # PITCH ANGLE
 a0c = (alphaeq0[1:] + alphaeq0[:-1])/2  # the middle values
 # alphaeq1 = np.radians(np.linspace(90.0, 179.9, int(pitch+1)))   # PITCH ANGLE
@@ -149,8 +149,8 @@ d_alpha = np.abs(alpha_array[1]-alpha_array[0])
 #
 #
 # %% Europa表面の初期座標
-ncolat = 30  # 分割数
-nphi = 60    # 分割数
+ncolat = 40  # 分割数
+nphi = 80    # 分割数
 long_array = np.radians(np.linspace(0, 360, nphi+1))
 colat_array = np.radians(np.linspace(0, 180, ncolat+1))
 # 動径方向の中点
@@ -618,12 +618,13 @@ def rk4(RV0, tsize, TC):
         # Gyro period
         TC = 2*np.pi*me/(-e*Babs(Rvec))
         # Europaの近く
-        if r_eur < 1.05*RE:
+        if r_eur < 1.03*RE:
             # 時間刻みの更新
             dt = FORWARD_BACKWARD*TC
         else:
             # 時間刻みの更新
-            dt = FORWARD_BACKWARD*25*TC
+            dt = FORWARD_BACKWARD*50*TC
+
         # 時間刻みの更新
         dt2 = 0.5*dt
 
@@ -779,9 +780,6 @@ def calc(mcolatr, mlongr):
     # LOOP INDEX INITIALIZED
     i = 0
     for alphar in alpha_array:
-        # ピッチ角をシフトさせる
-        alpha = ashift(alphar)
-
         # 初期座標をシフトさせる
         mcolat, mlong = dshift(mcolatr, mlongr)
 
@@ -808,6 +806,8 @@ def calc(mcolatr, mlongr):
         Rinitvec = Rinitvec + np.array([eurx, eury, eurz])
 
         # 速度ベクトル V0vec
+        # 0.01 以上 179.9 未満
+        alpha = (179.9 - 0.01)*np.pi*np.random.rand() + 0.01
         beta = 2*np.pi*np.random.rand()
         V0vec = V0*np.array([
             math.sin(alpha)*math.cos(beta),
@@ -901,7 +901,7 @@ def main():
 
     # 並列計算の実行
     start = time.time()
-    with Pool(processes=8) as pool:
+    with Pool(processes=1) as pool:
         result_list = list(pool.starmap(calc, args))
     stop = time.time()
     print('%.3f seconds' % (stop - start))
