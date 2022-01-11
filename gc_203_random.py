@@ -804,11 +804,12 @@ def calc(mcolatr, mlongr):
             math.cos(math.radians(-lam))
         ])
 
-        # 表面ベクトル(Europa表面から10km上空にしてみる)
+        # 表面ベクトル(Europa原点)
         Rinitvec = (RE)*nvec
 
         # Trace座標系に
         Rinitvec = Rinitvec + np.array([eurx, eury, eurz])
+        # print('START at: ', (Rinitvec + R0vec)/RE)
 
         # 速度ベクトル V0vec
         alpha = np.pi*np.random.rand()
