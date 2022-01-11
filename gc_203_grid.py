@@ -1,6 +1,6 @@
-""" gc_203_random.py
+""" gc_203_grid.py
 
-Created on Sun Jan 9 22:32:00 2021
+Created on Mon Jan 10 13:00:00 2022
 @author: Shin Satoh
 
 Description:
@@ -30,6 +30,10 @@ as
 
 is the invariant for the motion with a centrifugal force.
 
+Particles start from grid points defined by 40 x 80 (latitude x longitude).
+Each point has 60 different particles with different pitch angles. The
+pitch angle are given randomly.
+
 """
 
 
@@ -58,8 +62,8 @@ FORWARD_BACKWARD = -1  # 1=FORWARD, -1=BACKWARD
 #
 #
 # %% SETTINGS FOR THE NEXT EXECUTION
-energy = 100  # eV
-savename = 'gc203g_100ev_20220109_1.txt'
+energy = 7000  # eV
+savename = 'gc203g_7000ev_20220109_1.txt'
 
 
 #
@@ -806,7 +810,8 @@ def calc(mcolatr, mlongr):
         Rinitvec = Rinitvec + np.array([eurx, eury, eurz])
 
         # 速度ベクトル V0vec
-        # 0.01 以上 179.9 未満
+        # alpha: 0.01 以上 179.9 未満 でランダムに与える
+        # beta: 0 以上 360 未満 でランダムに与える
         alpha = (179.9 - 0.01)*np.pi*np.random.rand() + 0.01
         beta = 2*np.pi*np.random.rand()
         V0vec = V0*np.array([
@@ -845,7 +850,26 @@ def calc(mcolatr, mlongr):
             Rinitvec[0], Rinitvec[1], Rinitvec[2], vparallel, K0
         ])
 
-        # TRACING
+        """ vdotn の判定を導入した新しい方式
+        # result[:, 0] ... 出発点 x座標
+        # result[:, 1] ... 出発点 y座標
+        # result[:, 2] ... 出発点 z座標
+        # result[:, 3] ... 終点 x座標
+        # result[:, 4] ... 終点 y座標
+        # result[:, 5] ... 終点 z座標
+        # result[:, 6] ... yn
+        # result[:, 7] ... 終点 energy [eV]
+        # result[:, 8] ... 終点 alpha_eq [RADIANS]
+        # result[:, 9] ... 出発点 v_dot_n
+        result[i, 0:3] = Rinitvec
+        if vdotn < 0:
+            # vdotn < 0 のときだけトレースを行う
+            result[i, 3:9] = rk4(RV0vec, tsize, TC)
+        result[i, 9] = vdotn
+        i += 1
+        """
+
+        # TRACING(古い方式)
         runge = rk4(RV0vec, tsize, TC)
 
         # result[:, 0] ... 出発点 x座標
@@ -901,7 +925,7 @@ def main():
 
     # 並列計算の実行
     start = time.time()
-    with Pool(processes=1) as pool:
+    with Pool(processes=8) as pool:
         result_list = list(pool.starmap(calc, args))
     stop = time.time()
     print('%.3f seconds' % (stop - start))
