@@ -62,8 +62,8 @@ FORWARD_BACKWARD = -1  # 1=FORWARD, -1=BACKWARD
 #
 #
 # %% SETTINGS FOR THE NEXT EXECUTION
-energy = 7000  # eV
-savename = 'gc203g_7000ev_20220109_1.txt'
+energy = 400  # eV
+savename = 'gc203g_'+str(energy)+'ev_omgR2_1_20220113.txt'
 
 
 #
@@ -88,7 +88,10 @@ omgR = omgJ-omgE        # 木星のEuropaに対する相対的な自転角速度
 eomg = np.array([-np.sin(np.radians(10.)),
                  0., np.cos(np.radians(10.))])
 omgRvec = omgR*eomg
-omgR2 = 0.1*omgR        # 0.1*omgR = 10300 m/s (at Europa's orbit)
+omgR2 = omgR
+# omgR2 = 0.5*omgR        # 0.5*omgR = 51500 m/s (at Europa's orbit)
+# omgR2 = 0.1*omgR        # 0.1*omgR = 10300 m/s (at Europa's orbit)
+# omgR2 = 0.02*omgR        # 0.02*omgR = 2060 m/s (at Europa's orbit)
 omgR2vec = omgR2*eomg
 
 
@@ -523,7 +526,7 @@ def ode2(RV, t, K0):
     omgRxomgRxR_s = vecdot(bvec, -centrif(omg, Rvec))  # 遠心力項の平行成分
 
     # 共回転ドリフト速度
-    Vdvec = Vdvector(omg, Rvec)          # 共回転ドリフト速度ベクトル
+    Vdvec = Vdvector(omg, Rvec)     # 共回転ドリフト速度ベクトル
     Vdpara = vecdot(bvec, Vdvec)    # 平行成分
 
     # 微分の平行成分
@@ -819,7 +822,6 @@ def calc(mcolatr, mlongr):
             math.sin(alpha)*math.sin(beta),
             math.cos(alpha)
         ])
-        vdotn = vecdot(nvec, V0vec)
 
         # 磁場と平行な単位ベクトル
         B = Babs(Rinitvec + R0vec)
@@ -829,6 +831,9 @@ def calc(mcolatr, mlongr):
         rho = Rho(Rinitvec + R0vec)
         Vdvec = Vdvector(omgR2, Rinitvec + R0vec)
         Vdpara = bvec[0]*Vdvec[0] + bvec[1]*Vdvec[1] + bvec[2]*Vdvec[2]  # 平行成分
+
+        # 速度ベクトルと表面がなす角
+        vdotn = vecdot(nvec, V0vec + Vdvec)
 
         # Gyro Period
         TC = 2*np.pi*me/(-e*B)
@@ -850,7 +855,7 @@ def calc(mcolatr, mlongr):
             Rinitvec[0], Rinitvec[1], Rinitvec[2], vparallel, K0
         ])
 
-        """ vdotn の判定を導入した新しい方式
+        # vdotn の判定を導入した新しい方式
         # result[:, 0] ... 出発点 x座標
         # result[:, 1] ... 出発点 y座標
         # result[:, 2] ... 出発点 z座標
@@ -867,9 +872,8 @@ def calc(mcolatr, mlongr):
             result[i, 3:9] = rk4(RV0vec, tsize, TC)
         result[i, 9] = vdotn
         i += 1
-        """
 
-        # TRACING(古い方式)
+        """ # TRACING(古い方式)
         runge = rk4(RV0vec, tsize, TC)
 
         # result[:, 0] ... 出発点 x座標
@@ -886,12 +890,16 @@ def calc(mcolatr, mlongr):
         result[i, 3:9] = runge
         result[i, 9] = vdotn
         i += 1
+        """
 
     # yn1 = np.where(result[:, 6] == 1)  # 0でない行を見つける(検索は表面yn=6列目)
     # result2 = result[yn1]
 
-    with objmode():
-        print('A BIN DONE [sec]: ',  (time.perf_counter() - start0))
+    # 時間表示は10回に1回でよかろう
+    if i % 10 == 0:
+        with objmode():
+            print('A BIN DONE [sec]: ',  (time.perf_counter() - start0))
+
     return result
 
 

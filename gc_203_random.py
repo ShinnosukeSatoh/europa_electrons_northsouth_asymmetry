@@ -84,7 +84,9 @@ omgR = omgJ-omgE        # 木星のEuropaに対する相対的な自転角速度
 eomg = np.array([-np.sin(np.radians(10.)),
                  0., np.cos(np.radians(10.))])
 omgRvec = omgR*eomg
-omgR2 = 0.1*omgR        # 0.1*omgR = 10300 m/s (at Europa's orbit)
+omgR2 = 0.5*omgR        # 0.5*omgR = 51500 m/s (at Europa's orbit)
+# omgR2 = 0.1*omgR        # 0.1*omgR = 10300 m/s (at Europa's orbit)
+# omgR2 = 0.02*omgR        # 0.02*omgR = 2060 m/s (at Europa's orbit)
 omgR2vec = omgR2*eomg
 
 
@@ -829,6 +831,8 @@ def calc(mcolatr, mlongr):
         rho = Rho(Rinitvec + R0vec)
         Vdvec = Vdvector(omgR2, Rinitvec + R0vec)
         Vdpara = bvec[0]*Vdvec[0] + bvec[1]*Vdvec[1] + bvec[2]*Vdvec[2]  # 平行成分
+        Vd_norm = math.sqrt(Vdvec[0]**2 + Vdvec[1]**2 + Vdvec[2]**2)
+        print('Vd_norm: ', Vd_norm)
 
         # Gyro Period
         TC = 2*np.pi*me/(-e*B)
