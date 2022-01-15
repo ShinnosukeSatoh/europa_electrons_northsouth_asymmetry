@@ -62,8 +62,8 @@ FORWARD_BACKWARD = -1  # 1=FORWARD, -1=BACKWARD
 #
 #
 # %% SETTINGS FOR THE NEXT EXECUTION
-energy = 400  # eV
-savename = 'gc203g_'+str(energy)+'ev_omgR2_1_20220113.txt'
+energy = 50  # eV
+savename = 'gc203g_'+str(energy)+'ev_omgR2_01_20220114.txt'
 
 
 #
@@ -88,10 +88,11 @@ omgR = omgJ-omgE        # 木星のEuropaに対する相対的な自転角速度
 eomg = np.array([-np.sin(np.radians(10.)),
                  0., np.cos(np.radians(10.))])
 omgRvec = omgR*eomg
-omgR2 = omgR
+# omgR2 = omgR
 # omgR2 = 0.5*omgR        # 0.5*omgR = 51500 m/s (at Europa's orbit)
-# omgR2 = 0.1*omgR        # 0.1*omgR = 10300 m/s (at Europa's orbit)
+omgR2 = 0.1*omgR        # 0.1*omgR = 10300 m/s (at Europa's orbit)
 # omgR2 = 0.02*omgR        # 0.02*omgR = 2060 m/s (at Europa's orbit)
+# omgR2 = 0.01*omgR        # 0.02*omgR = 1030 m/s (at Europa's orbit)
 omgR2vec = omgR2*eomg
 
 
