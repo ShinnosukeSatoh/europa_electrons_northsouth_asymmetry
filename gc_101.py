@@ -444,8 +444,8 @@ def rk4(RV, t, dt, tsize, veq, aeq):
 
         if k % h == 0:
             # 1ステップでどれくらい進んだか
-            # D = np.linalg.norm(RV2[0:3]-RV[0:3])
-            # print(k*dt, D)
+            D = np.linalg.norm(RV2[0:3]-RV[0:3])
+            print(k*dt, D)
             trace[kk, :] = RV2[0:3]
             kk += 1
 
@@ -555,11 +555,13 @@ def main():
     print('%.3f seconds' % (time.time()-start))
 
     # SAVE
+    """
     np.savetxt(
         '/Users/shin/Documents/Research/Europa/Codes/gyrocenter/gyrocenter_1/' +
         str(savename), result
     )
     print('DONE')
+    """
 
     return 0
 

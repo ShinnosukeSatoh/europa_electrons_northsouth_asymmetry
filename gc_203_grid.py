@@ -18,7 +18,7 @@ The equation (30) is based on the assumption of
 so that you can divide the total velocity into a parallel term and
 a perpendicular term.
 
-This program is fully functional in both a forward-in-time tracing
+This program is fully functional in both a forward-in-time tracig
 and a backward-in-time tracing. WELL DONE!
 
 Additional description on Jan 4 2022:
@@ -62,8 +62,8 @@ FORWARD_BACKWARD = -1  # 1=FORWARD, -1=BACKWARD
 #
 #
 # %% SETTINGS FOR THE NEXT EXECUTION
-energy = 50  # eV
-savename = 'gc203g_'+str(energy)+'ev_omgR2_01_20220114.txt'
+energy = 5  # eV
+savename = 'gc203g_'+str(energy)+'ev_omgR2_1_20220119_test.txt'
 
 
 #
@@ -88,9 +88,9 @@ omgR = omgJ-omgE        # 木星のEuropaに対する相対的な自転角速度
 eomg = np.array([-np.sin(np.radians(10.)),
                  0., np.cos(np.radians(10.))])
 omgRvec = omgR*eomg
-# omgR2 = omgR
+omgR2 = omgR
 # omgR2 = 0.5*omgR        # 0.5*omgR = 51500 m/s (at Europa's orbit)
-omgR2 = 0.1*omgR        # 0.1*omgR = 10300 m/s (at Europa's orbit)
+# omgR2 = 0.1*omgR        # 0.1*omgR = 10300 m/s (at Europa's orbit)
 # omgR2 = 0.02*omgR        # 0.02*omgR = 2060 m/s (at Europa's orbit)
 # omgR2 = 0.01*omgR        # 0.02*omgR = 1030 m/s (at Europa's orbit)
 omgR2vec = omgR2*eomg
@@ -109,7 +109,7 @@ A3 = 4*3.1415*me/(mu*Mdip*e)        # ドリフト速度の係数
 #
 #
 # %% EUROPA POSITION (DETERMINED BY MAGNETIC LATITUDE)
-lam = 10.0
+lam = 6.0  # =============== !!! ==============
 L96 = 9.6*RJ  # Europa公転軌道 L値
 
 # 木星とtrace座標系原点の距離(x軸の定義)
@@ -822,6 +822,15 @@ def calc(mcolatr, mlongr):
             math.sin(alpha)*math.cos(beta),
             math.sin(alpha)*math.sin(beta),
             math.cos(alpha)
+        ])
+
+        # V0vecベクトルの回転
+        V0vec = np.array([
+            V0vec[0]*math.cos(math.radians(-lam))+V0vec[2] *
+            math.sin(math.radians(-lam)),
+            V0vec[1],
+            -V0vec[0]*math.sin(math.radians(-lam))+V0vec[2] *
+            math.cos(math.radians(-lam))
         ])
 
         # 磁場と平行な単位ベクトル
