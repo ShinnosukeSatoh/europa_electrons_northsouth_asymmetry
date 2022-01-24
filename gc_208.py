@@ -93,11 +93,11 @@ omgR = omgJ-omgE        # 木星のEuropaに対する相対的な自転角速度
 eomg = np.array([-np.sin(np.radians(10.)),
                  0., np.cos(np.radians(10.))])
 omgJvec = omgJ*eomg
-omgR2 = omgR
-# omgR2 = 0.5*omgR        # 0.5*omgR = 51500 m/s (at Europa's orbit)
-# omgR2 = 0.1*omgR        # 0.1*omgR = 10300 m/s (at Europa's orbit)
-# omgR2 = 0.02*omgR        # 0.02*omgR = 2060 m/s (at Europa's orbit)
-# omgR2 = 0.01*omgR        # 0.02*omgR = 1030 m/s (at Europa's orbit)
+omgR2 = omgJ
+# omgR2 = 0.5*omgJ        # 0.5*omgR = 51500 m/s (at Europa's orbit)
+# omgR2 = 0.1*omgJ        # 0.1*omgR = 10300 m/s (at Europa's orbit)
+# omgR2 = 0.02*omgJ        # 0.02*omgR = 2060 m/s (at Europa's orbit)
+# omgR2 = 0.01*omgJ        # 0.02*omgR = 1030 m/s (at Europa's orbit)
 omgR2vec = omgR2*eomg
 
 
@@ -719,6 +719,12 @@ def rk4(RV0, tsize, TC):
         if (RV[2] > 0) and (RV2[2] < 0):
             mphiR = math.atan2(Rvec[1], Rvec[0])    # 磁気経度
             # DEPLETION領域かどうか
+            #
+            # ここも変更しないといけない
+            # Europaの位置が時間とともに変化するので、減速領域の中心座標も
+            # ちゃんと更新しないといけない...
+            # あとIp論文を組み込みたい
+            #
             # IN THE DEPLETION REGION
             if (mphiR < mphi_leading) & (mphiR > mphi_trailing):
                 # 座標更新
