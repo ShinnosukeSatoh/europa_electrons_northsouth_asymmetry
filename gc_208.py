@@ -4,6 +4,8 @@ Created on Mon Jan 23 1:14:00 2022
 @author: Shin Satoh
 
 Description:
+This is nyooon method. Nyooon is nyon's simulation. Create bread. Fuuun!!!
+
 This program is intended to numerically solve the equation (30)
 on Northrop and Birmingham (1982).
 First order in gyroradius terms are omitted.
@@ -69,6 +71,7 @@ FORWARD_BACKWARD = -1  # 1=FORWARD, -1=BACKWARD
 # %% SETTINGS FOR THE NEXT EXECUTION
 energy = 5  # eV
 savename = 'gc203g_'+str(energy)+'ev_omgR2_1_20220119_test.txt'
+alp = 1             # strength of the interaction
 
 
 #
@@ -92,12 +95,7 @@ omgE = float(2.05E-5)   # Europaの公転角速度 単位: rad/s
 omgR = omgJ-omgE        # 木星のEuropaに対する相対的な自転角速度 単位: rad/s
 eomg = np.array([-np.sin(np.radians(10.)),
                  0., np.cos(np.radians(10.))])
-omgJvec = omgJ*eomg
-omgR2 = omgJ
-# omgR2 = 0.5*omgJ        # 0.5*omgR = 51500 m/s (at Europa's orbit)
-# omgR2 = 0.1*omgJ        # 0.1*omgR = 10300 m/s (at Europa's orbit)
-# omgR2 = 0.02*omgJ        # 0.02*omgR = 2060 m/s (at Europa's orbit)
-# omgR2 = 0.01*omgJ        # 0.02*omgR = 1030 m/s (at Europa's orbit)
+omgR2 = alp*omgR
 omgR2vec = omgR2*eomg
 
 
@@ -363,6 +361,103 @@ def Vdvector(omg, Rvec):
 
 #
 #
+# %% Ip(1996)による減速効果モデル - 速度ベクトルを計算
+def Ip_v(RV):
+    """
+    DESCRIPTION IS HERE.
+    """
+    # Europa中心の座標系
+    xyz = np.array([RV[0] - eurx, RV[1] - eury, RV[2] - eurz])
+
+    # 自転軸からの距離
+    rho = Rho(RV + R0vec)
+
+    Rc = RE
+    Vcor = omgR*rho     # the corotating flow speed relative to Europa
+
+    # flow速度ベクトルの回転
+    xyz = np.array([
+        xyz[0]*math.cos(math.radians(-lam))+xyz[2] *
+        math.sin(math.radians(-lam)),
+        xyz[1],
+        -xyz[0]*math.sin(math.radians(-lam))+xyz[2] *
+        math.cos(math.radians(-lam))
+    ])
+
+    # Europa中心の座標系
+    x = xyz[0]
+    y = xyz[1]
+
+    r = math.sqrt(x**2 + y**2)
+
+    if r < Rc:
+        Vx = 0
+        Vy = alp * Vcor
+
+    else:
+        Vx = -2*(1-alp)*Vcor*((Rc/r)**2)*(x*y)/(r**2)
+        Vy = Vcor + (1-alp)*Vcor*((Rc/r)**2)*(1-2*(y**2)/(r**2))
+
+    # flow速度ベクトル
+    V_ip = np.array([Vx, Vy, 0])
+
+    # flow速度ベクトルの回転(trace座標系に戻す)
+    V_ip = np.array([
+        V_ip[0]*math.cos(math.radians(lam))+V_ip[2] *
+        math.sin(math.radians(lam)),
+        V_ip[1],
+        -V_ip[0]*math.sin(math.radians(lam))+V_ip[2] *
+        math.cos(math.radians(lam))
+    ])
+
+    return V_ip
+
+
+#
+#
+# %% Ip(1996)による減速効果モデル - 角速度を計算
+def Ip_omg(RV):
+    """
+    DESCRIPTION IS HERE.
+    """
+    # Europa中心の座標系
+    xyz = np.array([RV[0] - eurx, RV[1] - eury, RV[2] - eurz])
+
+    # 自転軸からの距離
+    rho = Rho(RV + R0vec)
+
+    Rc = RE
+    Vcor = omgR*rho     # the corotating flow speed relative to Europa
+
+    # flow速度ベクトルの回転
+    xyz = np.array([
+        xyz[0]*math.cos(math.radians(-lam))+xyz[2] *
+        math.sin(math.radians(-lam)),
+        xyz[1],
+        -xyz[0]*math.sin(math.radians(-lam))+xyz[2] *
+        math.cos(math.radians(-lam))
+    ])
+
+    # Europa中心の座標系
+    x = xyz[0]
+    y = xyz[1]
+
+    r = math.sqrt(x**2 + y**2)
+
+    if r < Rc:
+        Vy = alp * Vcor
+
+    else:
+        Vy = Vcor + (1-alp)*Vcor*((Rc/r)**2)*(1-2*(y**2)/(r**2))
+
+    # flow角速度
+    V_flow = Vy/rho     # 近似
+
+    return V_flow
+
+
+#
+#
 # %% 遠心力項
 @jit('f8[:](f8,f8[:])', nopython=True, fastmath=True)
 def centrif(omg, Rvec):
@@ -413,12 +508,8 @@ def comeback_tau(RV2, req, lam0, K0):
 
     Rvec = RV2[0:3] + R0vec
 
-    # DEPLETION領域
-    mphiR = math.atan2(Rvec[1], Rvec[0])
-    if (mphiR < mphi_leading) & (mphiR > mphi_trailing):   # IN THE DEPLETION REGION
-        omg = omgR2
-    else:   # OUT OF THE DEPLETION REGION
-        omg = omgJ
+    # flow角速度
+    omg = Ip_omg(RV2)
 
     bvec = Bfield(Rvec)/Babs(Rvec)
     Vdvec = Vdvector(omg, Rvec)
@@ -481,12 +572,8 @@ def comeback(RV2, K0, tau):
 
     Rvec = RV2[0:3] + R0vec
 
-    # DEPLETION領域
-    mphiR = math.atan2(Rvec[1], Rvec[0])
-    if (mphiR < mphi_leading) & (mphiR > mphi_trailing):   # IN THE DEPLETION REGION
-        omg = omgR2
-    else:   # OUT OF THE DEPLETION REGION
-        omg = omgJ
+    # flow角速度
+    omg = Ip_omg(RV2)
 
     bvec = Bfield(Rvec)/Babs(Rvec)
     Vdvec = Vdvector(omg, Rvec)
@@ -500,12 +587,8 @@ def comeback(RV2, K0, tau):
     # 共回転復帰座標
     Rvec_new = Corotation(Rvec, omg*tau)
 
-    # DEPLETION領域
-    mphiR = math.atan2(Rvec_new[1], Rvec_new[0])
-    if (mphiR < mphi_leading) & (mphiR > mphi_trailing):   # IN THE DEPLETION REGION
-        omg = omgR2
-    else:   # OUT OF THE DEPLETION REGION
-        omg = omgJ
+    # flow角速度
+    omg = Ip_omg(Rvec_new - R0vec)
 
     # 保存量
     bvec = Bfield(Rvec)/Babs(Rvec)
@@ -514,7 +597,7 @@ def comeback(RV2, K0, tau):
     # Vdperp = math.sqrt(Vdvec[0]**2 + Vdvec[1]
     #                   ** 2 + Vdvec[2]**2 - Vdpara**2)
     # K1 = 0.5*me*((vparallel)**2 -
-    #              (Rho(Rvec_new)*omgJ)**2 + (vperp+Vdperp)**2)
+    #              (Rho(Rvec_new)*omg)**2 + (vperp+Vdperp)**2)
 
     RV2_new = np.zeros(RV2.shape)
     RV2_new[0:3] = Rvec_new - R0vec         # 新しいtrace座標系の位置ベクトル
@@ -558,19 +641,14 @@ def ode2(RV, t, K0):
     ds = 100.
     dBds = (Babs(Rvec+ds*bvec) - B)/ds  # 微分の平行成分
 
-    # DEPLETION領域
-    mphiR = math.atan2(Rvec[1], Rvec[0])
-    if (mphiR < mphi_leading) & (mphiR > mphi_trailing):   # IN THE DEPLETION REGION
-        omg = omgR2
-
-    else:   # OUT OF THE DEPLETION REGION
-        omg = omgJ
+    # flow角速度
+    omg = Ip_omg(RV)
 
     # 遠心力項
     omgRxomgRxR_s = vecdot(bvec, -centrif(omg, Rvec))  # 遠心力項の平行成分
 
-    # 共回転ドリフト速度
-    Vdvec = Vdvector(omg, Rvec)     # 共回転ドリフト速度ベクトル
+    # ドリフト速度
+    Vdvec = Ip_v(RV)                # flow速度ベクトル
     Vdpara = vecdot(bvec, Vdvec)    # 平行成分
 
     # 微分の平行成分
@@ -578,11 +656,11 @@ def ode2(RV, t, K0):
         bvec,
         np.array([
             (vecdot(bvec,
-                    Vdvector(omg, Rvec+np.array([dX, 0., 0.]))) - Vdpara)/dX,
+                    Ip_v(RV+np.array([dX, 0., 0.]))) - Vdpara)/dX,
             (vecdot(bvec,
-                    Vdvector(omg, Rvec+np.array([0., dY, 0.]))) - Vdpara)/dY,
+                    Ip_v(RV+np.array([0., dY, 0.]))) - Vdpara)/dY,
             (vecdot(bvec,
-                    Vdvector(omg, Rvec+np.array([0., 0., dZ]))) - Vdpara)/dZ
+                    Ip_v(RV+np.array([0., 0., dZ]))) - Vdpara)/dZ
         ])
     )
 
@@ -647,7 +725,7 @@ def rk4(RV0, tsize, TC):
     yn = 1  # 1...有効
 
     # Europaの位置(初期位置)
-    europa_position = np.array([eurx, eury, eurz])+R0vec
+    europa_position = np.array([eurx, eury, eurz])
 
     # ルンゲクッタ
     # print('RK4 START')
@@ -661,10 +739,10 @@ def rk4(RV0, tsize, TC):
         # 木星原点の位置ベクトルに変換
         Rvec = RV2[0:3] + R0vec
 
-        # Europaの位置
-        europa_position += Corotation(
-            np.array([eurx, eury, eurz])+R0vec, omgE*dt
-        )
+        # Europaの位置(時間変化する)
+        # europa_position += Corotation(
+        #     np.array([eurx, eury, eurz])+R0vec, omgE*dt
+        # ) - R0vec
 
         # Europaに再衝突
         r_eur = math.sqrt(
@@ -732,7 +810,7 @@ def rk4(RV0, tsize, TC):
                 continue
             else:   # OUT OF
                 # print('North to south')
-                omg = omgJ
+                omg = Ip_omg(RV)
 
                 bvec = Bfield(Rvec)/Babs(Rvec)
                 Vdvec = Vdvector(omg, Rvec)
@@ -740,14 +818,14 @@ def rk4(RV0, tsize, TC):
                 Vdperp = math.sqrt(Vdvec[0]**2 + Vdvec[1]**2
                                    + Vdvec[2]**2 - Vdpara**2)
                 vperp = math.sqrt(
-                    2*K0/me - (RV[3]-Vdpara)**2 + (Rho(Rvec)*omgJ)**2) - Vdperp
+                    2*K0/me - (RV[3]-Vdpara)**2 + (Rho(Rvec)*omg)**2) - Vdperp
                 vparallel = RV[3] - Vdpara
                 Vnorm = math.sqrt(vparallel**2 + vperp**2)
                 alpha_end = math.atan2(vperp, -vparallel)   # RADIANS
                 energy_end = me*0.5*(Vnorm**2)/float(1.602E-19)
 
                 # K1 = 0.5*me*((vparallel)**2 -
-                #             (Rho(Rvec)*omgJ)**2 + (vperp+Vdperp)**2)
+                #             (Rho(Rvec)*omg)**2 + (vperp+Vdperp)**2)
                 # print('alpha_end [degrees]: ', math.degrees(alpha_end))
                 # print('energy_end [eV]: ', energy_end)
                 # print('K1/K0: ', K1/K0)
@@ -777,7 +855,7 @@ def rk4(RV0, tsize, TC):
                 continue
             else:   # OUT OF
                 # print('South to north')
-                omg = omgJ
+                omg = Ip_omg(RV)
 
                 bvec = Bfield(Rvec)/Babs(Rvec)
                 Vdvec = Vdvector(omg, Rvec)
@@ -785,14 +863,14 @@ def rk4(RV0, tsize, TC):
                 Vdperp = math.sqrt(Vdvec[0]**2 + Vdvec[1]**2
                                    + Vdvec[2]**2 - Vdpara**2)
                 vperp = math.sqrt(
-                    2*K0/me - (RV[3]-Vdpara)**2 + (Rho(Rvec)*omgJ)**2) - Vdperp
+                    2*K0/me - (RV[3]-Vdpara)**2 + (Rho(Rvec)*omg)**2) - Vdperp
                 vparallel = RV[3] - Vdpara
                 Vnorm = math.sqrt(vparallel**2 + vperp**2)
                 alpha_end = math.atan2(vperp, -vparallel)   # RADIANS
                 energy_end = me*0.5*(Vnorm**2)/float(1.602E-19)
 
                 # K1 = 0.5*me*((vparallel)**2 -
-                #             (Rho(Rvec)*omgJ)**2 + (vperp+Vdperp)**2)
+                #             (Rho(Rvec)*omg)**2 + (vperp+Vdperp)**2)
                 # print('alpha_end [degrees]: ', math.degrees(alpha_end))
                 # print('energy_end [eV]: ', energy_end)
                 # print('K1/K0: ', K1/K0)
