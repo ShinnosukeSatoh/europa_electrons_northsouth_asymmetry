@@ -1,4 +1,4 @@
-""" gc_208_grid.py
+""" gc_208.py
 
 Created on Mon Jan 23 1:14:00 2022
 @author: Shin Satoh
@@ -180,6 +180,9 @@ d_colat = 0.5*np.abs(meshcolat[1, 0] - meshcolat[0, 0])
 # %% 初期座標をシフトさせる
 @jit('Tuple((f8,f8))(f8,f8)', nopython=True, fastmath=True)
 def dshift(mcolatr, mlongr):
+    """
+    DESCRIPTION IS HERE.
+    """
     # ビンの中心からのずれ量 shapeは(ny,nx)
     colatshift = d_colat*(2*np.random.rand() - 1)
     longshift = d_long*(2*np.random.rand() - 1)
@@ -196,6 +199,9 @@ def dshift(mcolatr, mlongr):
 # %% ピッチ角をシフトさせる
 @jit('f8(f8)', nopython=True, fastmath=True)
 def ashift(a):
+    """
+    DESCRIPTION IS HERE.
+    """
     # ビンの中心からのずれ量 shapeは(ny,nx)
     da = d_alpha*(2*np.random.rand() - 1)
 
@@ -361,7 +367,46 @@ def Vdvector(omg, Rvec):
 
 #
 #
+# %% 遠心力項
+@jit('f8[:](f8,f8[:])', nopython=True, fastmath=True)
+def centrif(omg, Rvec):
+    """
+    `omg` ... 角速度 [rad/s] \\
+    `Rvec` ... <ndarray> ダイポール原点の位置ベクトル \\
+    三重積 omgvec x (omgvec x Rvec) の計算
+    """
+    omgvec = omg*eomg
+    cross3 = np.array([
+        omgvec[1]*(omgvec[0]*Rvec[1]-omgvec[1]*Rvec[0]) -
+        omgvec[2]*(omgvec[2]*Rvec[0]-omgvec[0]*Rvec[2]),
+        omgvec[2]*(omgvec[1]*Rvec[2]-omgvec[2]*Rvec[1]) -
+        omgvec[0]*(omgvec[0]*Rvec[1]-omgvec[1]*Rvec[0]),
+        omgvec[0]*(omgvec[2]*Rvec[0]-omgvec[0]*Rvec[2]) -
+        omgvec[1]*(omgvec[1]*Rvec[2]-omgvec[2]*Rvec[1])
+    ])
+
+    return cross3
+
+
+#
+#
+# %% 自転軸からの距離 rho
+@jit('f8(f8[:])', nopython=True, fastmath=True)
+def Rho(Rvec):
+    """
+    `Rvec` ... <ndarray> ダイポール原点の位置ベクトル
+    """
+    Rlen2 = Rvec[0]**2 + Rvec[1]**2 + Rvec[2]**2
+    Rdot = eomg[0]*Rvec[0] + eomg[1]*Rvec[1] + eomg[2]*Rvec[2]
+    rho = math.sqrt(Rlen2 - Rdot**2)
+
+    return rho
+
+
+#
+#
 # %% Ip(1996)による減速効果モデル - 速度ベクトルを計算
+@jit(nopython=True, fastmath=True)
 def Ip_v(RV):
     """
     DESCRIPTION IS HERE.
@@ -416,6 +461,7 @@ def Ip_v(RV):
 #
 #
 # %% Ip(1996)による減速効果モデル - 角速度を計算
+@jit(nopython=True, fastmath=True)
 def Ip_omg(RV):
     """
     DESCRIPTION IS HERE.
@@ -453,45 +499,9 @@ def Ip_omg(RV):
     # flow角速度
     V_flow = Vy/rho     # 近似
 
+    print(V_flow)
+
     return V_flow
-
-
-#
-#
-# %% 遠心力項
-@jit('f8[:](f8,f8[:])', nopython=True, fastmath=True)
-def centrif(omg, Rvec):
-    """
-    `omg` ... 角速度 [rad/s] \\
-    `Rvec` ... <ndarray> ダイポール原点の位置ベクトル \\
-    三重積 omgvec x (omgvec x Rvec) の計算
-    """
-    omgvec = omg*eomg
-    cross3 = np.array([
-        omgvec[1]*(omgvec[0]*Rvec[1]-omgvec[1]*Rvec[0]) -
-        omgvec[2]*(omgvec[2]*Rvec[0]-omgvec[0]*Rvec[2]),
-        omgvec[2]*(omgvec[1]*Rvec[2]-omgvec[2]*Rvec[1]) -
-        omgvec[0]*(omgvec[0]*Rvec[1]-omgvec[1]*Rvec[0]),
-        omgvec[0]*(omgvec[2]*Rvec[0]-omgvec[0]*Rvec[2]) -
-        omgvec[1]*(omgvec[1]*Rvec[2]-omgvec[2]*Rvec[1])
-    ])
-
-    return cross3
-
-
-#
-#
-# %% 自転軸からの距離 rho
-@jit('f8(f8[:])', nopython=True, fastmath=True)
-def Rho(Rvec):
-    """
-    `Rvec` ... <ndarray> ダイポール原点の位置ベクトル
-    """
-    Rlen2 = Rvec[0]**2 + Rvec[1]**2 + Rvec[2]**2
-    Rdot = eomg[0]*Rvec[0] + eomg[1]*Rvec[1] + eomg[2]*Rvec[2]
-    rho = math.sqrt(Rlen2 - Rdot**2)
-
-    return rho
 
 
 #
@@ -564,7 +574,6 @@ def comeback(RV2, K0, tau):
     `K0` ... 保存量 \\
     `tau` ... 復帰にかかる時間
     """
-
     #
     # comeback_tau と comeback_position に分けたい
     # comeback_tau は 時刻 t の更新に使う
@@ -753,7 +762,7 @@ def rk4(RV0, tsize, TC):
 
         if r_eur < RE:
             yn = 0
-            # print('Collide')
+            print('Collide')
             break
 
         # Gyro period
@@ -892,9 +901,6 @@ def rk4(RV0, tsize, TC):
         # 座標更新
         RV = RV2
 
-        if abs(t) > 5000:
-            break
-
     return trace
 
 
@@ -982,7 +988,8 @@ def calc(mcolatr, mlongr):
 
         # 自転軸からの距離 rho (BACKTRACING)
         rho = Rho(Rinitvec + R0vec)
-        Vdvec = Vdvector(omgR2, Rinitvec + R0vec)
+        omg = Ip_omg(Rinitvec)
+        Vdvec = Ip_v(Rinitvec)
         Vdpara = bvec[0]*Vdvec[0] + bvec[1]*Vdvec[1] + bvec[2]*Vdvec[2]  # 平行成分
 
         # 速度ベクトルと表面がなす角
@@ -996,7 +1003,7 @@ def calc(mcolatr, mlongr):
         vperp = math.sqrt(V0**2 - vparallel**2)
 
         # 保存量 K0 (運動エネルギー)
-        K0 = 0.5*me*((vparallel-Vdpara)**2 - (rho*omgR2)**2 + vperp**2)
+        K0 = 0.5*me*((vparallel-Vdpara)**2 - (rho*omg)**2 + vperp**2)
 
         # 初期座標&初期速度ベクトルの配列
         # RV0vec[0] ... x座標
@@ -1061,7 +1068,7 @@ def calc(mcolatr, mlongr):
 # %% 時間設定
 t = 0
 dt = float(1E-5)  # 時間刻みはEuropaの近くまで来たらもっと細かくして、衝突判定の精度を上げよう
-t_len = 500000
+t_len = 10000000
 # t = np.arange(0, 60, dt)     # np.arange(0, 60, dt)
 tsize = int(t_len/dt)
 
