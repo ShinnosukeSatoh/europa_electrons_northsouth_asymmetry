@@ -62,8 +62,9 @@ FORWARD_BACKWARD = -1  # 1=FORWARD, -1=BACKWARD
 #
 #
 # %% SETTINGS FOR THE NEXT EXECUTION
-energy = 5  # eV
-savename = 'gc203g_'+str(energy)+'ev_omgR2_1_20220119_test.txt'
+energy = 200  # eV
+savename = 'gc203g2_'+str(energy)+'ev_alp_05_20220131.txt'
+alp = 0.5
 
 
 #
@@ -89,10 +90,6 @@ eomg = np.array([-np.sin(np.radians(10.)),
                  0., np.cos(np.radians(10.))])
 omgRvec = omgR*eomg
 omgR2 = omgR
-# omgR2 = 0.5*omgR        # 0.5*omgR = 51500 m/s (at Europa's orbit)
-# omgR2 = 0.1*omgR        # 0.1*omgR = 10300 m/s (at Europa's orbit)
-# omgR2 = 0.02*omgR        # 0.02*omgR = 2060 m/s (at Europa's orbit)
-# omgR2 = 0.01*omgR        # 0.02*omgR = 1030 m/s (at Europa's orbit)
 omgR2vec = omgR2*eomg
 
 
@@ -109,7 +106,7 @@ A3 = 4*3.1415*me/(mu*Mdip*e)        # ドリフト速度の係数
 #
 #
 # %% EUROPA POSITION (DETERMINED BY MAGNETIC LATITUDE)
-lam = 6.0  # =============== !!! ==============
+lam = 10.0  # =============== !!! ==============
 L96 = 9.6*RJ  # Europa公転軌道 L値
 
 # 木星とtrace座標系原点の距離(x軸の定義)
@@ -318,7 +315,7 @@ def mirrorpoint(lamu, alphau):
         (1+3*math.sin(lamu)**2)**(-0.5)
 
     # ニュートン法の反復
-    for _ in range(50):
+    for _ in range(40):
         f = math.cos(xn)**6 - math.sqrt(1+3*math.sin(xn)**2)*K
         fdash = -6*(math.cos(xn)**5)*math.sin(xn) - 3*(math.sqrt(1+3*math.sin(xn)
                                                                  ** 2)**(-1))*math.sin(xn)*math.cos(xn)*K
@@ -361,17 +358,15 @@ def Vdvector(Rvec):
     """
     DESCRIPTION IS HERE.
     """
-    alp = 1.0
     rv = Rvec - R0vec
 
     # Europa中心の座標系
     xyz = np.array([rv[0] - eurx, rv[1] - eury, rv[2] - eurz])
 
-    # 自転軸からの距離
-    rho = Rho(rv + R0vec)
-
     Rc = RE
-    Vcor = omgR*rho     # the corotating flow speed relative to Europa
+    # Vcor = omgR*Rho(Rvec)     # the corotating flow speed relative to Europa
+    omgvec = omgR*eomg
+    Vcor = omgvec[2]*Rvec[0] - omgvec[0]*Rvec[2]
 
     # 位置ベクトルの回転
     xyz = np.array([
@@ -392,21 +387,42 @@ def Vdvector(Rvec):
         Vx = 0
         Vy = alp * Vcor
 
-    else:
-        Vx = -2*(1-alp)*Vcor*((Rc/r)**2)*(x*y)/(r**2)
-        Vy = Vcor + (1-alp)*Vcor*((Rc/r)**2)*(1-2*(y**2)/(r**2))
+        V_ip = np.array([Vx, Vy, 0])
 
-    # flow速度ベクトル
-    V_ip = np.array([Vx, Vy, 0])
+        """
+        # flow速度ベクトルの回転(trace座標系に戻す)
+        V_ip = np.array([
+            Vx*math.cos(math.radians(lam)),
+            Vy,
+            -Vx*math.sin(math.radians(lam))
+        ])
+        """
 
-    # flow速度ベクトルの回転(trace座標系に戻す)
-    V_ip = np.array([
-        V_ip[0]*math.cos(math.radians(lam))+V_ip[2] *
-        math.sin(math.radians(lam)),
-        V_ip[1],
-        -V_ip[0]*math.sin(math.radians(lam))+V_ip[2] *
-        math.cos(math.radians(lam))
-    ])
+    elif (Rc <= r) and (r < depletionR):
+        # Vx = -2*(1-alp)*Vcor*(Rc**2)*(x*y)/(r**4)
+        Vy = Vcor + (1-alp)*Vcor*((Rc/r)**2) * \
+            ((x+y)*(x-y)/(r**2))   # 発散を避けるために変形
+        # Vy = Vcor + (1-alp)*Vcor*((Rc/r)**2)*(1-2*(y**2)/(r**2))
+
+        Vx = 0
+        V_ip = np.array([Vx, Vy, 0])
+
+        # flow速度ベクトルの回転(trace座標系に戻す)
+        """
+        V_ip = np.array([
+            Vx*math.cos(math.radians(lam)),
+            Vy,
+            -Vx*math.sin(math.radians(lam))
+        ])
+        """
+
+    else:   # 減速領域の外(通常の共回転)
+        omgvec = omgR*eomg
+        V_ip = np.array([
+            omgvec[1]*Rvec[2] - omgvec[2]*Rvec[1],
+            omgvec[2]*Rvec[0] - omgvec[0]*Rvec[2],
+            omgvec[0]*Rvec[1] - omgvec[1]*Rvec[0]
+        ])
 
     return V_ip
 
@@ -419,17 +435,18 @@ def Ip_omg(Rvec):
     """
     DESCRIPTION IS HERE.
     """
-    alp = 1.0
     rv = Rvec - R0vec
 
     # Europa中心の座標系
     xyz = np.array([rv[0] - eurx, rv[1] - eury, rv[2] - eurz])
 
     # 自転軸からの距離
-    rho = Rho(rv + R0vec)
+    rho = Rho(Rvec)
 
     Rc = RE
-    Vcor = omgR*rho     # the corotating flow speed relative to Europa
+    # Vcor = omgR*rho     # the corotating flow speed relative to Europa
+    omgvec = omgR*eomg
+    Vcor = omgvec[2]*Rvec[0] - omgvec[0]*Rvec[2]
 
     # flow速度ベクトルの回転
     xyz = np.array([
@@ -449,11 +466,19 @@ def Ip_omg(Rvec):
     if r < Rc:
         Vy = alp * Vcor
 
-    else:
-        Vy = Vcor + (1-alp)*Vcor*((Rc/r)**2)*(1-2*(y**2)/(r**2))
+        # flow角速度
+        omg_flow = Vy/rho     # 近似
 
-    # flow角速度
-    omg_flow = Vy/rho     # 近似
+    elif (Rc <= r) and (r < depletionR):
+        Vy = Vcor + (1-alp)*Vcor*((Rc/r)**2) * \
+            ((x+y)*(x-y)/(r**2))   # 発散を避けるために変形
+        # Vy = Vcor + (1-alp)*Vcor*((Rc/r)**2)*(1-2*(y**2)/(r**2))
+
+        # flow角速度
+        omg_flow = Vy/rho     # 近似
+
+    else:
+        omg_flow = omgR
 
     return omg_flow
 
@@ -516,7 +541,7 @@ def comeback(RV2, req, lam0, K0):
     mirlam = mirrorpoint(lam0, alphau)
 
     # 積分の刻み
-    dellam = 1E-3
+    dellam = 1E-2
 
     # 積分の長さ
     lamlen = int((mirlam-lam0)/dellam)
@@ -544,8 +569,8 @@ def comeback(RV2, req, lam0, K0):
     omg = Ip_omg(Rvec_new)
 
     # 保存量
-    bvec = Bfield(Rvec)/Babs(Rvec)
-    Vdvec = Vdvector(Rvec)
+    bvec = Bfield(Rvec_new)/Babs(Rvec_new)
+    Vdvec = Vdvector(Rvec_new)
     Vdpara = vecdot(bvec, Vdvec)
     # Vdperp = math.sqrt(Vdvec[0]**2 + Vdvec[1]
     #                   ** 2 + Vdvec[2]**2 - Vdpara**2)
@@ -594,7 +619,7 @@ def ode2(RV, t, K0):
     ds = 100.
     dBds = (Babs(Rvec+ds*bvec) - B)/ds  # 微分の平行成分
 
-    omg = omgR
+    omg = Ip_omg(Rvec)
 
     # 遠心力項
     omgRxomgRxR_s = vecdot(bvec, -centrif(omg, Rvec))  # 遠心力項の平行成分
@@ -988,7 +1013,7 @@ def calc(mcolatr, mlongr):
 # %% 時間設定
 t = 0
 dt = float(1E-5)  # 時間刻みはEuropaの近くまで来たらもっと細かくして、衝突判定の精度を上げよう
-t_len = 10000000
+t_len = 20000000
 # t = np.arange(0, 60, dt)     # np.arange(0, 60, dt)
 tsize = int(t_len/dt)
 
@@ -1013,7 +1038,7 @@ def main():
 
     # 並列計算の実行
     start = time.time()
-    with Pool(processes=2) as pool:
+    with Pool(processes=8) as pool:
         result_list = list(pool.starmap(calc, args))
     stop = time.time()
     print('%.3f seconds' % (stop - start))
@@ -1059,6 +1084,7 @@ def main():
     print('nphi: {:>7d}'.format(nphi))
     print('total: {:>7d}'.format(alpha_array.size*ncolat*nphi))
     # print('magnetic equator: {:>7d}'.format(mageq.shape))
+    print('#NaN: ', mageq[np.where(np.isnan(mageq).any(axis=1))].shape)
     print(savename)
 
     return 0
