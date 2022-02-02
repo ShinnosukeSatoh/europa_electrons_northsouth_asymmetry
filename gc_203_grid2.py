@@ -62,9 +62,9 @@ FORWARD_BACKWARD = -1  # 1=FORWARD, -1=BACKWARD
 #
 #
 # %% SETTINGS FOR THE NEXT EXECUTION
-energy = 200  # eV
-savename = 'gc203g2_'+str(energy)+'ev_alp_05_20220131.txt'
-alp = 0.5
+energy = 70  # eV
+savename = 'gc203g2d_'+str(energy)+'ev_alp_025_20220131.txt'
+alp = 0.25
 
 
 #
@@ -133,9 +133,10 @@ z_m_rad = math.radians(2.0)      # 南側
 z_m = -R0*math.cos(z_m_rad)**2 * math.sin(z_m_rad)
 
 # DEPLETION領域
-depletionR = 1.05*RE  # 円筒の半径
-mphi_leading = math.atan2(eury+R0y+depletionR, eurx+R0x)     # 先行半球中心の磁気経度
-mphi_trailing = math.atan2(eury+R0y-depletionR, eurx+R0x)    # 後行半球中心の磁気経度
+depletionR = 1.5*RE  # 円筒の半径
+mphi_leading = math.atan2(eury+R0y+1.05*RE, eurx+R0x)     # 先行半球中心の磁気経度
+mphi_trailing = math.atan2(eury+R0y-1.05*RE, eurx+R0x)    # 後行半球中心の磁気経度
+y_thresh = eury+R0y-1.1*RE
 
 
 #
@@ -386,8 +387,9 @@ def Vdvector(Rvec):
     if r < Rc:
         Vx = 0
         Vy = alp * Vcor
+        Vz = alp*(omgvec[0]*Rvec[1] - omgvec[1]*Rvec[0])
 
-        V_ip = np.array([Vx, Vy, 0])
+        V_ip = np.array([Vx, Vy, Vz])
 
         """
         # flow速度ベクトルの回転(trace座標系に戻す)
@@ -398,14 +400,16 @@ def Vdvector(Rvec):
         ])
         """
 
-    elif (Rc <= r) and (r < depletionR):
+    else:
         # Vx = -2*(1-alp)*Vcor*(Rc**2)*(x*y)/(r**4)
         Vy = Vcor + (1-alp)*Vcor*((Rc/r)**2) * \
             ((x+y)*(x-y)/(r**2))   # 発散を避けるために変形
         # Vy = Vcor + (1-alp)*Vcor*((Rc/r)**2)*(1-2*(y**2)/(r**2))
 
-        Vx = 0
-        V_ip = np.array([Vx, Vy, 0])
+        Vx = alp*(omgvec[1]*Rvec[2] - omgvec[2]*Rvec[1])
+        Vz = alp*(omgvec[0]*Rvec[1] - omgvec[1]*Rvec[0])
+
+        V_ip = np.array([Vx, Vy, Vz])
 
         # flow速度ベクトルの回転(trace座標系に戻す)
         """
@@ -415,14 +419,6 @@ def Vdvector(Rvec):
             -Vx*math.sin(math.radians(lam))
         ])
         """
-
-    else:   # 減速領域の外(通常の共回転)
-        omgvec = omgR*eomg
-        V_ip = np.array([
-            omgvec[1]*Rvec[2] - omgvec[2]*Rvec[1],
-            omgvec[2]*Rvec[0] - omgvec[0]*Rvec[2],
-            omgvec[0]*Rvec[1] - omgvec[1]*Rvec[0]
-        ])
 
     return V_ip
 
@@ -469,16 +465,13 @@ def Ip_omg(Rvec):
         # flow角速度
         omg_flow = Vy/rho     # 近似
 
-    elif (Rc <= r) and (r < depletionR):
+    else:
         Vy = Vcor + (1-alp)*Vcor*((Rc/r)**2) * \
             ((x+y)*(x-y)/(r**2))   # 発散を避けるために変形
         # Vy = Vcor + (1-alp)*Vcor*((Rc/r)**2)*(1-2*(y**2)/(r**2))
 
         # flow角速度
         omg_flow = Vy/rho     # 近似
-
-    else:
-        omg_flow = omgR
 
     return omg_flow
 
@@ -756,10 +749,8 @@ def rk4(RV0, tsize, TC):
 
         # 磁気赤道面到達 (N → S)
         if (RV[2] > 0) and (RV2[2] < 0):
-            mphiR = math.atan2(Rvec[1], Rvec[0])    # 磁気経度
-            # DEPLETION領域かどうか
-            # IN THE DEPLETION REGION
-            if (mphiR < mphi_leading) & (mphiR > mphi_trailing):
+            y = RV[1]
+            if y > y_thresh:    # IN
                 # 座標更新
                 RV = RV2
                 continue
@@ -801,10 +792,8 @@ def rk4(RV0, tsize, TC):
 
         # 磁気赤道面到達 (S → N)
         if (RV[2] < 0) and (RV2[2] > 0):
-            mphiR = math.atan2(Rvec[1], Rvec[0])    # 磁気経度
-            # DEPLETION領域かどうか
-            # IN THE DEPLETION REGION
-            if (mphiR < mphi_leading) & (mphiR > mphi_trailing):
+            y = RV[1]
+            if y > y_thresh:    # IN
                 # 座標更新
                 RV = RV2
                 continue
@@ -1000,8 +989,8 @@ def calc(mcolatr, mlongr):
     # yn1 = np.where(result[:, 6] == 1)  # 0でない行を見つける(検索は表面yn=6列目)
     # result2 = result[yn1]
 
-    # 時間表示は10回に1回でよかろう
-    if i % 10 == 0:
+    # 時間表示は20回に1回でよかろう
+    if i % 20 == 0:
         with objmode():
             print('A BIN DONE [sec]: ',  (time.perf_counter() - start0))
 
