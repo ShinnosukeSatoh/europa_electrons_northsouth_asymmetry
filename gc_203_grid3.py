@@ -62,9 +62,9 @@ FORWARD_BACKWARD = -1  # 1=FORWARD, -1=BACKWARD
 #
 #
 # %% SETTINGS FOR THE NEXT EXECUTION
-energy = 90  # eV
-savename = 'gc203g3d_'+str(energy)+'ev_alp_0125_20220201.txt'
-alp = 0.125
+energy = 10  # eV
+savename = 'gc203g3d_'+str(energy)+'ev_alp_001_20220201.txt'
+alp = 0.01
 
 
 #

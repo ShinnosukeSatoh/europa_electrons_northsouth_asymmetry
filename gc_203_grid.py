@@ -62,8 +62,8 @@ FORWARD_BACKWARD = -1  # 1=FORWARD, -1=BACKWARD
 #
 #
 # %% SETTINGS FOR THE NEXT EXECUTION
-energy = 5  # eV
-savename = 'gc203g_'+str(energy)+'ev_omgR2_1_20220119_test.txt'
+energy = 25  # eV
+savename = 'gc203g_'+str(energy)+'ev_omgR2_01_20220114.txt'
 
 
 #
@@ -88,9 +88,10 @@ omgR = omgJ-omgE        # 木星のEuropaに対する相対的な自転角速度
 eomg = np.array([-np.sin(np.radians(10.)),
                  0., np.cos(np.radians(10.))])
 omgRvec = omgR*eomg
-omgR2 = omgR
+# omgR2 = omgR
 # omgR2 = 0.5*omgR        # 0.5*omgR = 51500 m/s (at Europa's orbit)
-# omgR2 = 0.1*omgR        # 0.1*omgR = 10300 m/s (at Europa's orbit)
+omgR2 = 0.1*omgR        # 0.1*omgR = 10300 m/s (at Europa's orbit)
+# omgR2 = 0.04*omgR        # 0.02*omgR = 2060 m/s (at Europa's orbit)
 # omgR2 = 0.02*omgR        # 0.02*omgR = 2060 m/s (at Europa's orbit)
 # omgR2 = 0.01*omgR        # 0.02*omgR = 1030 m/s (at Europa's orbit)
 omgR2vec = omgR2*eomg
@@ -109,7 +110,7 @@ A3 = 4*3.1415*me/(mu*Mdip*e)        # ドリフト速度の係数
 #
 #
 # %% EUROPA POSITION (DETERMINED BY MAGNETIC LATITUDE)
-lam = 6.0  # =============== !!! ==============
+lam = 10.0  # =============== !!! ==============
 L96 = 9.6*RJ  # Europa公転軌道 L値
 
 # 木星とtrace座標系原点の距離(x軸の定義)
