@@ -830,7 +830,7 @@ def calc(mcolatr, mlongr, V0):
         result[i, 9] = vdotn
         i += 1
 
-    if np.random.rand() >= 0.75:    # ときどき計算時間を表示する
+    if np.random.rand() >= 0.80:    # ときどき計算時間を表示する
         with objmode():
             print('A BIN DONE [sec]: ',  (time.perf_counter() - start0))
 

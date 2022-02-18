@@ -38,7 +38,7 @@ pitch angle are given randomly.
 
 
 # %% ライブラリのインポート
-from numba import jit, f8, objmode
+from numba import jit, objmode
 # from numba.experimental import jitclass
 import numpy as np
 import math
