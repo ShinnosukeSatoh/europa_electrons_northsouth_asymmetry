@@ -70,6 +70,7 @@ FORWARD_BACKWARD = -1  # 1=FORWARD, -1=BACKWARD
 #
 #
 # %% SETTINGS FOR THE NEXT EXECUTION
+date = '20220218'
 eV_array = np.array([10000, 20000, 30000])    # [eV]
 alp = 0.1
 
@@ -855,8 +856,10 @@ def main():
     mcolatr = meshcolat.reshape(meshcolat.size)  # 1次元化
     mlongr = meshlong.reshape(meshlong.size)  # 1次元化
 
+    total_s = time.time()
+
     for i in range(len(eV_array)):
-        savename = 'gc301_'+str(eV_array[i])+'ev_alp_'+str(alp)+'_20220211.txt'
+        savename = 'gc301_'+str(eV_array[i])+'ev_alp_'+str(alp)+'_'+date+'.txt'
 
         # 情報表示
         print('alpha: {:>7d}'.format(alpha_array.size))
@@ -926,6 +929,8 @@ def main():
 
         print(str(eV_array[i])+'eV is done.')
         print('===================================')
+
+    print('%.3f seconds' % (time.time() - total_s))
 
     return 0
 
