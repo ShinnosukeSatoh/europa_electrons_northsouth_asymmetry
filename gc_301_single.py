@@ -77,7 +77,7 @@ FORWARD_BACKWARD = -1  # 1=FORWARD, -1=BACKWARD
 #
 # %% SETTINGS FOR THE NEXT EXECUTION
 date = '20220218_single'
-eV_array = 10000    # [eV]
+eV_array = 100    # [eV]
 alp = 1.0
 pitchangle = 60  # degrees
 colatitude = 80  # degrees
