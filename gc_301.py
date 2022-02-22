@@ -62,8 +62,6 @@ import math
 import time
 from multiprocessing import Pool
 
-from gc_203_grid import vec3cross
-
 # FAVORITE COLORS (FAVOURITE COLOURS?)
 color = ['#6667AB', '#0F4C81', '#5B6770', '#FF6F61', '#645394',
          '#84BD00', '#F6BE00', '#F7CAC9', '#16137E', '#45B8AC']
@@ -155,7 +153,7 @@ z_m = -R0*math.cos(z_m_rad)**2 * math.sin(z_m_rad)
 # V0 = math.sqrt((energy/me)*2*float(1.602E-19))
 V0_array = np.sqrt((eV_array/me)*2*float(1.602E-19))    # ndarray
 pitch = int(60)  # 0-180度を何分割するか
-loss = 0.05     # Loss cone
+loss = 0.1     # Loss cone
 alphaeq0 = np.radians(np.linspace(loss, 180-loss, int(pitch+1)))
 alpha_array = (alphaeq0[1:] + alphaeq0[:-1])/2  # the middle values
 d_alpha = np.abs(alpha_array[1]-alpha_array[0])
