@@ -614,7 +614,7 @@ def comeback(RV2, req, lam0, K0):
     RV2_new = np.zeros(RV2.shape)
     RV2_new[0:3] = Rvec_new - R0vec         # 新しいtrace座標系の位置ベクトル
     RV2_new[3] = - vparallel + Vdpara       # 磁力線に平行な速度成分 向き反転
-    RV2_new[4] = RV2[4]
+    RV2_new[4] = RV2[4]                     # 保存量K0
 
     return RV2_new
 
@@ -721,7 +721,7 @@ def rk4(RV0, tsize, TC):
 
     # ダイポールからの距離(@磁気赤道面 近似)
     r = math.sqrt(Rvec[0]**2 + Rvec[1]**2 + Rvec[2]**2)
-    req = r/(math.cos(lam)**2)
+    req = r/(math.cos(math.radians(lam))**2)
 
     # トレース開始
     RV = RV0[0:4]
