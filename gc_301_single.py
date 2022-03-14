@@ -76,9 +76,9 @@ FORWARD_BACKWARD = -1  # 1=FORWARD, -1=BACKWARD
 #
 #
 # %% SETTINGS FOR THE NEXT EXECUTION
-date = '20220218_single2'
+date = '20220224_single2'
 eV_array = 50000    # [eV]
-alp = 1.0
+alp = 0.1
 pitchangle = 80  # degrees
 colatitude = 80  # degrees
 longitude = 10   # degrees
@@ -219,8 +219,8 @@ def Corotation(Rvec, theta):
         [n1*n2*(1-cos)+n3*sin, (n2**2)*(1-cos)+cos, n2*n3*(1-cos)-n2*sin],
         [n1*n3*(1-cos)-n2*sin, n2*n3*(1-cos)+n1*sin, (n3**2)*(1-cos)+cos]
     ])
-    print('n1, n2, n3: ', n1, n2, n3)
-    print('Rmatrix: ', Rmatrix)
+    # print('n1, n2, n3: ', n1, n2, n3)
+    # print('Rmatrix: ', Rmatrix)
 
     Rvec_new = np.array([
         Rmatrix[0, 0]*Rvec[0] + Rmatrix[0, 1]*Rvec[1] + Rmatrix[0, 2]*Rvec[2],
@@ -771,16 +771,18 @@ def rk4_hybrid(Rinitvec, V0vec, V0):
             # 北側しきい値
             if (RV[2] < z_p) and (RV2[2] > z_p):
                 print('UPPER')
-                print('MAE: ', RV2[2])
                 RV2 = comeback(RV2, req, z_p_rad, K0)
-                print('ATO: ', RV2[2])
+                Rvec = RV2[0:3] + R0vec
+                Lvalue = math.sqrt(Rvec[0]**2 + Rvec[1]**2 + Rvec[2]**2)/RJ
+                print('Lvalue: ', Lvalue)
 
             # 南側しきい値
             if (RV[2] > z_m) and (RV2[2] < z_m):
                 print('LOWER')
-                print('MAE: ', RV2[2])
                 RV2 = comeback(RV2, req, z_m_rad, K0)
-                print('ATO: ', RV2[2])
+                Rvec = RV2[0:3] + R0vec
+                Lvalue = math.sqrt(Rvec[0]**2 + Rvec[1]**2 + Rvec[2]**2)/RJ
+                print('Lvalue: ', Lvalue)
 
             # 座標格納
             trace[k+kk, 0:3] = RV2[0:3]
@@ -844,7 +846,7 @@ def calc(mcolatr, mlongr, V0):
         math.cos(math.radians(-lam))
     ])
 
-    # 初期座標ベクトル(Europa表面から10km=1E+4m上空にしてみる)
+    # 初期座標ベクトル
     Rinitvec = (RE)*nvec
 
     # Trace座標系に

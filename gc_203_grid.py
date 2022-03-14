@@ -62,8 +62,9 @@ FORWARD_BACKWARD = -1  # 1=FORWARD, -1=BACKWARD
 #
 #
 # %% SETTINGS FOR THE NEXT EXECUTION
-energy = 25  # eV
-savename = 'gc203g_'+str(energy)+'ev_omgR2_01_20220114.txt'
+energy = 90  # eV
+savename = 'gc203g_'+str(energy)+'ev_omgR2_01_20220224.txt'
+lam = 10.0  # =============== !!! ==============
 
 
 #
@@ -85,8 +86,8 @@ Mdip = float(1.6E+27)   # Jupiterのダイポールモーメント 単位: A m^2
 omgJ = float(1.74E-4)   # 木星の自転角速度 単位: rad/s
 omgE = float(2.05E-5)   # Europaの公転角速度 単位: rad/s
 omgR = omgJ-omgE        # 木星のEuropaに対する相対的な自転角速度 単位: rad/s
-eomg = np.array([-np.sin(np.radians(10.)),
-                 0., np.cos(np.radians(10.))])
+eomg = np.array([-np.sin(np.radians(lam)),
+                 0., np.cos(np.radians(lam))])
 omgRvec = omgR*eomg
 # omgR2 = omgR
 # omgR2 = 0.5*omgR        # 0.5*omgR = 51500 m/s (at Europa's orbit)
@@ -110,7 +111,6 @@ A3 = 4*3.1415*me/(mu*Mdip*e)        # ドリフト速度の係数
 #
 #
 # %% EUROPA POSITION (DETERMINED BY MAGNETIC LATITUDE)
-lam = 10.0  # =============== !!! ==============
 L96 = 9.6*RJ  # Europa公転軌道 L値
 
 # 木星とtrace座標系原点の距離(x軸の定義)
@@ -585,7 +585,8 @@ def rk4(RV0, tsize, TC):
 
     # ダイポールからの距離(@磁気赤道面 近似)
     r = math.sqrt(Rvec[0]**2 + Rvec[1]**2 + Rvec[2]**2)
-    req = r/(math.cos(lam)**2)
+    # req = r/(math.cos(lam)**2)
+    req = r/(math.cos(math.radians(lam))**2)    # こっちが正しい
 
     # トレース開始
     RV = RV0[0:4]
