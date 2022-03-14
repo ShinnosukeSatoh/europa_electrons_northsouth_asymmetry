@@ -42,11 +42,21 @@ We are interested only in the incident electrons on a flux tube that crosses
 Europa. This fact simplifies the model of the moon-plasma interaction.  In
 the simulation box, the corotation is uniformally defined by $\\alpha$.
 
+This program is intended to calculate trajectories of both ions and electrons.
+The gyro radius of a heavy ion, such as S++, is NOT negligible when tracing
+the trajectories. In this program, the gyro motion is fully solved near Europa
+and the guiding center is traced out side of the designated area.
+
+Version
+0.1.1 (Feb 24, 2022)
+0.1.2 (Feb 28, 2022) -> SMTP INTRODUCED
+
 """
 
 
 # %% ライブラリのインポート
-from numba import jit, objmode
+from numba import jit
+# from numba import objmode
 # from numba.experimental import jitclass
 import numpy as np
 import math
@@ -56,6 +66,13 @@ import math
 import time
 from multiprocessing import Pool
 
+# SMTP
+import smtplib
+from email.mime.text import MIMEText
+from email.utils import formatdate
+# from getpass import getpass
+
+
 # FAVORITE COLORS (FAVOURITE COLOURS?)
 color = ['#6667AB', '#0F4C81', '#5B6770', '#FF6F61', '#645394',
          '#84BD00', '#F6BE00', '#F7CAC9', '#16137E', '#45B8AC']
@@ -63,16 +80,30 @@ color = ['#6667AB', '#0F4C81', '#5B6770', '#FF6F61', '#645394',
 
 #
 #
-# %% FORWARD OR BACKWARD
+# %% TOGGLE
 FORWARD_BACKWARD = -1  # 1=FORWARD, -1=BACKWARD
+GYRO = 1               # 0=GUIDING CENTER, 1=GYRO MOTION
+ION_ELECTRON = 0       # 0=ELECTRON, 1=ION
+Z = 2                  # CHARGE (-1 for ELECTRON)
+U = 32                 # ATOMIC MASS (32 for SULFUR)
+CORES = 18             # NUMBER OF CPU CORES TO USE
 
 
 #
 #
 # %% SETTINGS FOR THE NEXT EXECUTION
-date = '20220218'
-eV_array = np.array([10000, 20000, 30000])    # [eV]
-alp = 0.1
+date = '20220312e'
+eV_array = np.array([
+    # 1, 2, 3, 4, 5,
+    6, 7, 8, 9, 10,
+    15, 20, 25, 30, 40, 50, 60, 70, 80, 90,
+    100, 200, 300,
+    400, 500, 700,
+    1000, 2000, 3000, 4000, 5000, 6000, 7000,
+    10000, 20000  # , 30000, 40000, 50000, 70000
+])    # [eV]
+alp = 0.025
+lam = 10.0        # degrees
 
 
 #
@@ -84,10 +115,14 @@ RE = float(1.56E+6)     # Europa半径    単位: m
 mE = float(4.8E+22)     # Europa質量    単位: kg
 
 c = float(3E+8)         # 真空中光速    単位: m/s
-me = float(9.1E-31)     # 電子質量      単位: kg
-e = float(-1.6E-19)     # 電子電荷      単位: C
-
 G = float(6.67E-11)     # 万有引力定数  単位: m^3 kg^-1 s^-2
+
+NA = 6.02E+23           # アボガドロ数
+me = float(9.1E-31)     # 電子質量   単位: kg
+if ION_ELECTRON == 1:
+    me = me*1836*U      # 荷電粒子質量 単位: kg
+    print(me)
+e = Z*float(1.6E-19)    # 電荷      単位: C
 
 mu = float(1.26E-6)     # 真空中透磁率  単位: N A^-2 = kg m s^-2 A^-2
 Mdip = float(1.6E+27)   # Jupiterのダイポールモーメント 単位: A m^2
@@ -95,25 +130,25 @@ omgJ = float(1.74E-4)   # 木星の自転角速度 単位: rad/s
 omgE = float(2.05E-5)   # Europaの公転角速度 単位: rad/s
 omgR = omgJ-omgE        # 木星のEuropaに対する相対的な自転角速度 単位: rad/s
 omgR = omgR*alp
-eomg = np.array([-np.sin(np.radians(10.)),
-                 0., np.cos(np.radians(10.))])
+eomg = np.array([-np.sin(np.radians(lam)),
+                 0., np.cos(np.radians(lam))])
 omgRvec = omgR*eomg
 
 
 #
 #
 # %% 途中計算でよく出てくる定数の比
-# A1 = float(e/me)                  # 運動方程式内の定数
-# A2 = float(mu*Mdip/4/3.14)        # ダイポール磁場表式内の定数
-A1 = float(-1.7582E+11)             # 運動方程式内の定数
-A2 = 1.60432E+20                    # ダイポール磁場表式内の定数
-A3 = 4*3.1415*me/(mu*Mdip*e)        # ドリフト速度の係数
+A1 = e/me                        # 運動方程式内の定数
+A2 = (mu*Mdip)/(4*np.pi)         # ダイポール磁場表式内の定数
+# A1 = float(-1.7582E+11)        # 運動方程式内の定数
+# A2 = 1.60432E+20               # ダイポール磁場表式内の定数
+A3 = 4*3.1415*me/(mu*Mdip*e)     # ドリフト速度の係数
 
 
 #
 #
 # %% EUROPA POSITION (DETERMINED BY MAGNETIC LATITUDE)
-lam = 10.0  # =============== !!! ==============
+# lam = 10.0  # =============== !!! ==============
 L96 = 9.6*RJ  # Europa公転軌道 L値
 
 
@@ -135,7 +170,7 @@ eury = 0 - R0y
 eurz = L96*math.sin(math.radians(lam)) - R0z
 
 # 遠方しきい値(z方向) 磁気緯度で設定
-z_p_rad = math.radians(11.0)      # 北側
+z_p_rad = math.radians(12.0)      # 北側
 z_p = R0*math.cos(z_p_rad)**2 * math.sin(z_p_rad)
 z_m_rad = math.radians(2.0)      # 南側
 z_m = -R0*math.cos(z_m_rad)**2 * math.sin(z_m_rad)
@@ -147,7 +182,7 @@ z_m = -R0*math.cos(z_m_rad)**2 * math.sin(z_m_rad)
 # V0 = math.sqrt((energy/me)*2*float(1.602E-19))
 V0_array = np.sqrt((eV_array/me)*2*float(1.602E-19))    # ndarray
 pitch = int(60)  # 0-180度を何分割するか
-loss = 0.05     # Loss cone
+loss = 0.1     # Loss cone
 alphaeq0 = np.radians(np.linspace(loss, 180-loss, int(pitch+1)))
 alpha_array = (alphaeq0[1:] + alphaeq0[:-1])/2  # the middle values
 d_alpha = np.abs(alpha_array[1]-alpha_array[0])
@@ -169,6 +204,35 @@ meshlong, meshcolat = np.meshgrid(long_middle, colat_middle)
 # ビンの中でシフトさせる距離(r-phiJ平面)
 d_long = 0.5*np.abs(meshlong[0, 1] - meshlong[0, 0])
 d_colat = 0.5*np.abs(meshcolat[1, 0] - meshcolat[0, 0])
+
+
+#
+#
+# %% 計算終了通知の設定
+def MAIL(sendAddress, pwd, calctime):
+    subject = 'Notification from Deimos'
+    bodyText = 'A series of calculation is done. Calculation time was ' + \
+        str(calctime)+' sec. -- Deimos'
+    fromAddress = sendAddress
+    toAddress = 'shinnosuke.satoh@pparc.gp.tohoku.ac.jp'
+
+    # SMTPサーバに接続
+    smtpobj = smtplib.SMTP('smtp.gmail.com', 587)
+    smtpobj.starttls()
+    smtpobj.login(sendAddress, pwd)
+
+    # メール作成
+    msg = MIMEText(bodyText)
+    msg['Subject'] = subject
+    msg['From'] = fromAddress
+    msg['To'] = toAddress
+    msg['Date'] = formatdate()
+
+    # 作成したメールを送信
+    smtpobj.send_message(msg)
+    smtpobj.close()
+
+    return 0
 
 
 #
@@ -410,27 +474,58 @@ def comeback(RV2, req, lam0, K0):
     `lam0` ... スタートの磁気緯度 \\
     `K0` ... 保存量
     """
-
+    # trace座標系から木星原点位置ベクトルに変換
     Rvec = RV2[0:3] + R0vec
 
+    # 共回転角速度
     omg = omgR
 
+    # 磁場ベクトルの単位ベクトル
     bvec = Bfield(Rvec)/Babs(Rvec)
+
+    # 共回転ドリフト速度
     Vdvec = Vdvector(Rvec)
+    Vdpara = vecdot(bvec, Vdvec)
+
+    # 速度ベクトルの磁場に垂直な成分
+    vperp = math.sqrt(
+        2*K0/me - (RV2[3]-Vdpara)**2 + (Rho(Rvec)*omg)**2)
+
+    # 速度ベクトルの磁場に平行な成分
+    vparallel = RV2[3]
+
+    # 速さ更新(これあってる?)
+    # v_new = math.sqrt(vparallel**2 + vperp**2)
+    # + math.sqrt(Vdvec[0]**2 + Vdvec[1]**2 + Vdvec[2]**2)
+    # veq = v_new  # これあってる?
+    veq = math.sqrt(2*K0/me + (Rho(Rvec)*omg)**2)
+
+    """
+    # 共回転ドリフト速度
+    Vdvec = Vdvector(Rvec)
+
     Vdpara = vecdot(bvec, Vdvec)
     Vdperp = math.sqrt(Vdvec[0]**2 + Vdvec[1]
                        ** 2 + Vdvec[2]**2 - Vdpara**2)
+
+    # 速度ベクトルの磁場に垂直な成分
     vperp = math.sqrt(
         2*K0/me - (RV2[3]-Vdpara)**2 + (Rho(Rvec)*omg)**2) - Vdperp
+
+    # 速度ベクトルの磁場に平行な成分
     vparallel = RV2[3] - Vdpara
+
+    # 速さ更新(これあってる?)
     v_new = math.sqrt(vparallel**2 + vperp**2)
     veq = v_new  # これあってる?
+    """
 
     # その場のピッチ角
     alphau = math.atan2(vperp, vparallel)
 
     # ミラーポイントの磁気緯度
     mirlam = mirrorpoint(lam0, alphau)
+    # print(lam0*180/3.1415, mirlam*180/3.1415)
 
     # 積分の刻み
     dellam = 1E-3
@@ -455,11 +550,11 @@ def comeback(RV2, req, lam0, K0):
 
     # 共回転復帰座標
     tau = FORWARD_BACKWARD*2*tau0
-    Rvec = Corotation(Rvec, omg*tau)    # 復帰座標ベクトル
+    Rvec_new = Corotation(Rvec, omgR*tau)    # 復帰座標ベクトル
 
     # 復帰座標における共回転速度ベクトル
-    bvec = Bfield(Rvec)/Babs(Rvec)
-    Vdvec = Vdvector(Rvec)
+    bvec = Bfield(Rvec_new)/Babs(Rvec_new)
+    Vdvec = Vdvector(Rvec_new)
     Vdpara = vecdot(bvec, Vdvec)
     # Vdperp = math.sqrt(Vdvec[0]**2 + Vdvec[1]
     #                   ** 2 + Vdvec[2]**2 - Vdpara**2)
@@ -467,11 +562,59 @@ def comeback(RV2, req, lam0, K0):
     #              (Rho(Rvec_new)*omgR)**2 + (vperp+Vdperp)**2)
 
     RV2_new = np.zeros(RV2.shape)       # initialize
-    RV2_new[0:3] = Rvec - R0vec         # 新しいtrace座標系の位置ベクトル
+    RV2_new[0:3] = Rvec_new - R0vec         # 新しいtrace座標系の位置ベクトル
     RV2_new[3] = - vparallel + Vdpara   # 磁力線に平行な速度成分 向き反転
-    RV2_new[4] = RV2[4]
 
     return RV2_new
+
+
+#
+#
+# %% ジャイロを真剣に解く運動方程式
+@jit('f8[:](f8[:],f8)', nopython=True, fastmath=True)
+def ode1(r3d, t):
+    """
+    `r3d` ... <ndarray> trace座標系 \\
+    `t` ... <float> 時刻
+    """
+
+    # r3d はジャイロ運動の位置ベクトルと速度ベクトル
+    # r3d[0] ... x of gyration
+    # r3d[1] ... y
+    # r3d[2] ... z
+    # r3d[3] ... vx
+    # r3d[4] ... vy
+    # r3d[5] ... vz
+
+    # 木星原点の位置ベクトルに変換
+    R3D = r3d[0:3] + R0vec
+
+    # Magnetic Field
+    # B = Babs(R3D)       # 磁場強度
+    Bvec = Bfield(R3D)  # 磁場ベクトル
+
+    # 共回転速度ベクトル
+    vd = Vdvector(R3D)
+
+    # 運動方程式の各成分(ジャイロ+共回転ドリフト)
+    x = r3d[3] + vd[0]
+    y = r3d[4] + vd[1]
+    z = r3d[5] + vd[2]
+
+    vx = A1*(r3d[4]*Bvec[2] - r3d[5]*Bvec[1])
+    vy = A1*(r3d[5]*Bvec[0] - r3d[3]*Bvec[2])
+    vz = A1*(r3d[3]*Bvec[1] - r3d[4]*Bvec[0])
+
+    eom = np.array([
+        x,
+        y,
+        z,
+        vx,
+        vy,
+        vz
+    ])
+
+    return eom
 
 
 #
@@ -480,7 +623,7 @@ def comeback(RV2, req, lam0, K0):
 @jit('f8[:](f8[:],f8, f8)', nopython=True, fastmath=True)
 def ode2(RV, t, K0):
     """
-    `RV2` ... <ndarray> trace座標系 \\
+    `RV` ... <ndarray> trace座標系 \\
     `t` ... 時刻 \\
     `K0` ... 保存量
     """
@@ -508,6 +651,7 @@ def ode2(RV, t, K0):
     ds = 100.
     dBds = (Babs(Rvec+ds*bvec) - B)/ds  # 微分の平行成分
 
+    # 共回転角速度
     omg = omgR
 
     # 遠心力項
@@ -536,6 +680,7 @@ def ode2(RV, t, K0):
     # parallel速度の微分方程式
     dVparadt = -(mu/me)*dBds + omgRxomgRxR_s + (RV[3]-Vdpara)*dVdparads
 
+    # 新しい座標
     RVnew = np.array([
         Vparavec[0]+Vdvec[0],
         Vparavec[1]+Vdvec[1],
@@ -549,35 +694,61 @@ def ode2(RV, t, K0):
 #
 #
 # %% 4次ルンゲクッタ.. functionの定義
-@jit('f8[:](f8[:],f8)', nopython=True, fastmath=True)
-def rk4(RV0, TC):
+@jit('f8[:](f8[:],f8[:], f8)', nopython=True, fastmath=True)
+def rk4(Rinitvec, V0vec, V0):
     """
-    `RV0` ... <ndarray> trace座標系 \\
-    `TC` ... サイクロトロン周期 [s] \\
-    Details follow: \\
-    `RV0.shape` ... (6,) \\
-    `RV0[0]` ... x of Guiding Center \\
-    `RV0[1]` ... y \\
-    `RV0[2]` ... z \\
-    `RV0[3]` ... v parallel \\
-    `RV0[4]` ... K0 (保存量)
+    `Rinitvec` ... <ndarray> trace座標系 \\
+    `V0vec` ... <ndarray> 速度ベクトル \\
+    `V0` ... <float> 初速
     """
+
+    # 木星原点の位置ベクトルに変換
+    Rvec = Rinitvec[0:3] + R0vec
+
+    # 磁場と平行な単位ベクトル
+    B = Babs(Rvec)
+    bvec = Bfield(Rvec)/B
+
+    # 自転軸からの距離 rho (BACKTRACING)
+    rho = Rho(Rvec)
+    Vdvec = Vdvector(Rvec)
+    Vdpara = vecdot(bvec, Vdvec)  # 平行成分
+
+    # Gyro Period
+    TC = 2*np.pi*me/(np.abs(e)*B)
+    # print('TC [sec]: ', TC)
+
+    # Gyro Radius
+    # gyroradius = (me*V0)/(np.abs(e)*B)
+
+    # V0vec を分解
+    vparallel = vecdot(bvec, V0vec)
+    vperp = math.sqrt(V0**2 - vparallel**2)
+
+    # 保存量 K0 (運動エネルギー)
+    K0 = 0.5*me*((vparallel-Vdpara)**2 - (rho*omgR)**2 + vperp**2)
+
+    # 初期座標&初期速度ベクトルの配列(rk4に突っ込む)
+    # RV[0] ... x座標
+    # RV[1] ... y座標
+    # RV[2] ... z座標
+    # RV[3] ... v parallel
+    RV = np.array([
+        Rinitvec[0],
+        Rinitvec[1],
+        Rinitvec[2],
+        vparallel
+    ])
 
     # 時刻初期化
     t = 0
 
-    # K0 保存量
-    K0 = RV0[4]
-
-    # 木星原点の位置ベクトルに変換
-    Rvec = RV0[0:3] + R0vec
-
     # ダイポールからの距離(@磁気赤道面 近似)
     r = math.sqrt(Rvec[0]**2 + Rvec[1]**2 + Rvec[2]**2)
-    req = r/(math.cos(lam)**2)
+    # req = r/(math.cos(lam)**2)
+    req = r/(math.cos(math.radians(lam))**2)    # こっちが正しい
 
     # トレース開始
-    RV = RV0[0:4]
     dt = FORWARD_BACKWARD*TC
     dt2 = dt*0.5
 
@@ -594,7 +765,6 @@ def rk4(RV0, TC):
     yn = 1  # 1...有効
 
     # ルンゲクッタ
-    # print('RK4 START')
     for k in range(200000000000):
         F1 = ode2(RV, t, K0)
         F2 = ode2(RV+dt2*F1, t+dt2, K0)
@@ -606,29 +776,32 @@ def rk4(RV0, TC):
         Rvec = RV2[0:3] + R0vec
 
         # Europaに再衝突
-        r_eur = math.sqrt((RV2[0]-eurx)**2 + (RV2[1]-eury)
-                          ** 2 + (RV2[2]-eurz)**2)
+        r_eur = math.sqrt(
+            (RV2[0]-eurx)**2 +
+            (RV2[1]-eury)**2 +
+            (RV2[2]-eurz)**2
+        )
+
+        # Europaに再衝突
         if r_eur < RE:
             yn = 0
             # print('Collide')
             break
 
         # Gyro period
-        TC = 2*np.pi*me/(-e*Babs(Rvec))
+        TC = 2*np.pi*me/(np.abs(e)*Babs(Rvec))
 
         # Europaの近く
-        if r_eur < 1.03*RE:
+        if r_eur < 1.04*RE:
             # 時間刻みの更新
             dt = FORWARD_BACKWARD*TC
         else:
             # 時間刻みの更新
             dt = FORWARD_BACKWARD*50*TC
 
-        # 時間刻みの更新
-        dt2 = 0.5*dt
-
         # 時刻更新
-        t += dt
+        t += FORWARD_BACKWARD*dt
+        dt2 = 0.5*dt
 
         # 木星に衝突
         # r_jovi = math.sqrt(Rvec[0]**2 + Rvec[1]**2 + Rvec[2]**2)
@@ -648,8 +821,8 @@ def rk4(RV0, TC):
             RV2 = comeback(RV2, req, z_m_rad, K0)
 
         # 磁気赤道面到達(これをプラズマシート中心にしたいんだけど...!)
-        if (((RV[2] > 0) and (RV2[2] < 0))           # N → S
-                or ((RV[2] < 0) and (RV2[2] > 0))):  # S → N
+        if (((RV[2] >= 0) and (RV2[2] < 0))           # 通過方向: N → S
+                or ((RV[2] <= 0) and (RV2[2] > 0))):  # 通過方向: S → N
             # 遠方まできたか
             y = RV2[1]
             if y > -RE:  # まだ近い
@@ -694,7 +867,251 @@ def rk4(RV0, TC):
         RV = RV2
 
         if abs(t) > 5000:
+            print('out')
             break
+
+    return trace
+
+
+#
+#
+# %% 4次ルンゲクッタ.. functionの定義
+@jit('f8[:](f8[:],f8[:],f8)', nopython=True, fastmath=True)
+def rk4_hybrid(Rinitvec, V0vec, V0):
+    """
+    `Rinitvec` ... <ndarray> trace座標系 \\
+    `V0vec` ... <ndarray> 速度ベクトル \\
+    `V0` ... <float> 初速
+    """
+    # print('V0 [km/s]: ', V0/1000)
+    # 位置ベクトル&速度ベクトル(6列)
+    r3d = np.array([
+        Rinitvec[0],    # x座標
+        Rinitvec[1],
+        Rinitvec[2],
+        V0vec[0],       # vx
+        V0vec[1],
+        V0vec[2]
+    ])
+
+    # 時刻初期化
+    t = 0
+
+    # 木星原点座標(Rinitvecはtrace座標系)
+    Rvec = Rinitvec + R0vec
+
+    # ダイポールからの距離(@磁気赤道面 近似)
+    r = math.sqrt(Rvec[0]**2 + Rvec[1]**2 + Rvec[2]**2)
+    req = r/(math.cos(math.radians(lam))**2)
+    # print('req: ', req/RJ)
+
+    # Gyro Period
+    B = Babs(Rvec)
+    TC = 2*np.pi*me/(np.abs(e)*B)
+    dt = FORWARD_BACKWARD*TC/(360)   # ジャイロを100分割するような時間刻み
+    dt2 = dt*0.5
+
+    # Gyro Radius
+    gyroradius = (me*V0)/(np.abs(e)*B)
+
+    # 有効な粒子か
+    yn = 1
+
+    # 座標配列
+    # trace[0] ... 終点 x座標
+    # trace[1] ... 終点 y座標
+    # trace[2] ... 終点 z座標
+    # trace[3] ... yn
+    # trace[4] ... 終点 energy [eV]
+    # trace[5] ... 終点 alpha_eq [RADIANS]
+    trace = np.zeros(6)
+
+    # ルンゲクッタ(ジャイロ)
+    # print('GYRO STARTS')
+    for k in range(5000000000000000000):
+        f1 = ode1(r3d, t)
+        f2 = ode1(r3d+dt2*f1, t+dt2)
+        f3 = ode1(r3d+dt2*f2, t+dt2)
+        f4 = ode1(r3d+dt*f3, t+dt)
+        r3d2 = r3d + dt*(f1 + 2*f2 + 2*f3 + f4)/6
+
+        # Europaからの距離
+        r_eur = math.sqrt(
+            (r3d2[0]-eurx)**2 +
+            (r3d2[1]-eury)**2 +
+            (r3d2[2]-eurz)**2
+        )
+
+        # Europaに再衝突
+        if r_eur < RE:
+            yn = 0
+            # print('Collide 1')
+            break
+
+        # 座標と速度更新
+        r3d = r3d2
+
+        # 時刻更新
+        t += FORWARD_BACKWARD*dt
+        # Europaの近傍を出た
+        if r_eur > (RE + 15*gyroradius):
+            # print('k:', k)
+            break
+
+        # if abs(r3d2[2]-eurz) > 1.2*RE:
+        #     break
+
+    if yn == 1:  # 有効な粒子
+        # 木星原点座標(r3dはtrace座標系)
+        Rvec = r3d[0:3] + R0vec
+
+        # 磁場と平行な単位ベクトル
+        B = Babs(Rvec)
+        bvec = Bfield(Rvec)/B
+
+        # 自転軸からの距離 rho (BACKTRACING)
+        # rho = Rho(Rvec)
+        Vdvec = Vdvector(Rvec)
+        Vdpara = vecdot(bvec, Vdvec)  # 平行成分
+
+        # Gyro Period
+        TC = 2*np.pi*me/(np.abs(e)*B)
+        # print('TC [sec]: ', TC)
+
+        # 時間刻み
+        dt = FORWARD_BACKWARD*TC
+        dt2 = dt*0.5
+
+        # 速度ベクトル
+        V1vec = r3d[3:6]
+        V1_2 = V1vec[0]**2 + V1vec[1]**2 + V1vec[2]**2
+
+        # V0vec を分解
+        vparallel = vecdot(bvec, V1vec)         # 磁力線平行成分
+        vperp = math.sqrt(V1_2 - vparallel**2)  # 磁力線垂直成分
+
+        # 保存量 K0 (運動エネルギー)
+        # K0 = 0.5*me*((vparallel-Vdpara)**2 - (rho*omgR)**2 + vperp**2)    # これは誤り
+        K0 = 0.5*me*((vparallel)**2 + vperp**2)
+
+        # 初期座標&初期速度ベクトルの配列(回転中心計算用)
+        # trace座標系
+        # RV[0] ... x座標
+        # RV[1] ... y座標
+        # RV[2] ... z座標
+        # RV[3] ... v parallel
+        RV = np.array([
+            r3d[0], r3d[1], r3d[2], vparallel   # vparallelの符号?
+        ])
+        # if vparallel < 0:
+        #     # 速度ベクトル向きの確認
+        #     print(vecdot(Bfield(Rinitvec+R0vec)/Babs(Rinitvec+R0vec), V0vec))
+
+        # ルンゲクッタ(回転中心)
+        # print('GUIDING CENTER STARTS')
+        for k in range(6000000000000000000):
+            F1 = ode2(RV, t, K0)
+            F2 = ode2(RV+dt2*F1, t+dt2, K0)
+            F3 = ode2(RV+dt2*F2, t+dt2, K0)
+            F4 = ode2(RV+dt*F3, t+dt, K0)
+            RV2 = RV + dt*(F1 + 2*F2 + 2*F3 + F4)/6
+
+            # trace座標系から木星原点の位置ベクトルに変換
+            Rvec = RV2[0:3] + R0vec
+
+            # Europa中心からの距離
+            r_eur = math.sqrt(
+                (RV2[0]-eurx)**2 +
+                (RV2[1]-eury)**2 +
+                (RV2[2]-eurz)**2
+            )
+
+            # Europaに再衝突
+            if r_eur < RE:
+                yn = 0
+                # print('Collide 2')
+                break
+
+            # Gyro period
+            TC = 2*np.pi*me/(np.abs(e)*Babs(Rvec))
+
+            # 時間刻みの更新
+            dt = FORWARD_BACKWARD*TC*50
+            dt2 = 0.5*dt
+
+            # 時刻更新
+            t += FORWARD_BACKWARD*dt
+
+            # 木星に衝突
+            # r_jovi = math.sqrt(Rvec[0]**2 + Rvec[1]**2 + Rvec[2]**2)
+            # if r_jovi < RJ:
+            #     yn = 0
+            #     # print('Loss')
+            #     break
+
+            # 北側しきい値
+            if (RV[2] < z_p) and (RV2[2] > z_p):
+                # print('UPPER')
+                RV2 = comeback(RV2, req, z_p_rad, K0)
+                # Rvec = RV2[0:3] + R0vec
+                # print('L: ', math.sqrt(
+                #     Rvec[0]**2 + Rvec[1]**2 + Rvec[2]**2
+                # )/RJ)
+
+            # 南側しきい値
+            if (RV[2] > z_m) and (RV2[2] < z_m):
+                # print('LOWER')
+                RV2 = comeback(RV2, req, z_m_rad, K0)
+
+            # 磁気赤道面到達(これをプラズマシート中心にしたいんだけど...!)
+            if (((RV[2] >= 0) and (RV2[2] < 0))           # 通過方向: N → S
+                    or ((RV[2] <= 0) and (RV2[2] > 0))):  # 通過方向: S → N
+                # 遠方まできたか
+                y = RV2[1]
+                if y > -RE:  # まだ近い
+                    # 座標更新
+                    RV = RV2
+                    continue
+                else:        # 遠方まできた
+                    # print('North to south')
+                    bvec = Bfield(Rvec)/Babs(Rvec)
+                    Vdvec = Vdvector(Rvec)
+                    Vdpara = vecdot(bvec, Vdvec)
+                    Vdperp = math.sqrt(Vdvec[0]**2 + Vdvec[1]**2
+                                       + Vdvec[2]**2 - Vdpara**2)
+                    vperp = math.sqrt(
+                        2*K0/me - (RV[3]-Vdpara)**2 + (Rho(Rvec)*omgR)**2) - Vdperp
+                    vparallel = RV[3] - Vdpara
+                    Vnorm = math.sqrt(vparallel**2 + vperp**2)
+                    alpha_end = math.atan2(vperp, -vparallel)   # RADIANS
+                    energy_end = me*0.5*(Vnorm**2)/float(1.602E-19)
+
+                    # K1 = 0.5*me*((vparallel)**2 -
+                    #              (Rho(Rvec)*omgR)**2 + (vperp+Vdperp)**2)
+                    # print('alpha_end [degrees]: ', math.degrees(alpha_end))
+                    # print('energy_end [eV]: ', energy_end)
+                    # print('K1/K0: ', K1/K0)
+
+                    # 座標配列
+                    # trace[0] ... 終点 x座標
+                    # trace[1] ... 終点 y座標
+                    # trace[2] ... 終点 z座標
+                    # trace[3] ... yn
+                    # trace[4] ... 終点 energy [eV]
+                    # trace[5] ... 終点 alpha_eq [RADIANS]
+                    trace[0:3] = RV[0:3]
+                    trace[3] = yn
+                    trace[4] = energy_end
+                    trace[5] = alpha_end
+
+                    break
+
+            # 座標更新
+            RV = RV2
+
+            if abs(t) > 5000000:
+                print('out')
+                break
 
     return trace
 
@@ -703,9 +1120,9 @@ def rk4(RV0, TC):
 #
 # %% 4次ルンゲクッタ.. classの定義
 class RK4:
-    def __init__(self, RV0, tsize, TC):
-        mageq_positions = rk4(RV0, TC)
-        self.positions = mageq_positions
+    def __init__(self, Rinitvec, V0vec, V0):
+        p = rk4_hybrid(Rinitvec, V0vec, V0)
+        self.positions = p
 
 
 #
@@ -713,9 +1130,11 @@ class RK4:
 # %% トレースを行うfunction
 @jit(nopython=True, fastmath=True)
 def calc(mcolatr, mlongr, V0):
+    """
     # time.time() はそのままじゃ使えない
     with objmode(start0='f8'):
         start0 = time.perf_counter()
+    """
 
     # result[:, 0] ... 出発点 x座標
     # result[:, 1] ... 出発点 y座標
@@ -751,8 +1170,8 @@ def calc(mcolatr, mlongr, V0):
             math.cos(math.radians(-lam))
         ])
 
-        # 初期座標ベクトル(Europa表面から10km=1E+4m上空にしてみる)
-        Rinitvec = (RE+1E+4)*nvec
+        # 初期座標ベクトル
+        Rinitvec = (RE)*nvec
 
         # Trace座標系に
         Rinitvec += np.array([eurx, eury, eurz])
@@ -781,27 +1200,27 @@ def calc(mcolatr, mlongr, V0):
         ])
 
         # 磁場と平行な単位ベクトル
-        B = Babs(Rvec)
-        bvec = Bfield(Rvec)/B
+        # B = Babs(Rvec)
+        # bvec = Bfield(Rvec)/B
 
         # 自転軸からの距離 rho (BACKTRACING)
-        rho = Rho(Rvec)
+        # rho = Rho(Rvec)
         Vdvec = Vdvector(Rvec)
-        Vdpara = vecdot(bvec, Vdvec)  # 平行成分
+        # Vdpara = vecdot(bvec, Vdvec)  # 平行成分
 
         # 速度ベクトルと表面がなす角
         vdotn = vecdot(nvec, V0vec + Vdvec)
 
         # Gyro Period
-        TC = 2*np.pi*me/(-e*B)
+        # TC = 2*np.pi*me/(-e*B)
         # print('TC [sec]: ', TC)
 
         # V0vec を分解
-        vparallel = vecdot(bvec, V0vec)
-        vperp = math.sqrt(V0**2 - vparallel**2)
+        # vparallel = vecdot(bvec, V0vec)
+        # vperp = math.sqrt(V0**2 - vparallel**2)
 
         # 保存量 K0 (運動エネルギー)
-        K0 = 0.5*me*((vparallel-Vdpara)**2 - (rho*omgR)**2 + vperp**2)
+        # K0 = 0.5*me*((vparallel-Vdpara)**2 - (rho*omgR)**2 + vperp**2)
 
         # 初期座標&初期速度ベクトルの配列(rk4に突っ込む)
         # RV0vec[0] ... x座標
@@ -809,9 +1228,9 @@ def calc(mcolatr, mlongr, V0):
         # RV0vec[2] ... z座標
         # RV0vec[3] ... v parallel
         # RV0vec[4] ... K0 (保存量)
-        RV0vec = np.array([
-            Rinitvec[0], Rinitvec[1], Rinitvec[2], vparallel, K0
-        ])
+        # RV0vec = np.array([
+        #     Rinitvec[0], Rinitvec[1], Rinitvec[2], vparallel, K0
+        # ])
 
         # vdotn の判定を導入した新しい方式
         # result[:, 0] ... 出発点 x座標
@@ -825,15 +1244,23 @@ def calc(mcolatr, mlongr, V0):
         # result[:, 8] ... 終点 alpha_eq [RADIANS]
         # result[:, 9] ... 出発点 v_dot_n
         result[i, 0:3] = Rinitvec
+
+        # vdotn < 0 のときだけトレースを行う
         if vdotn < 0:
-            # vdotn < 0 のときだけトレースを行う
-            result[i, 3:9] = rk4(RV0vec, TC)
+            if GYRO == 1:
+                result[i, 3:9] = rk4_hybrid(
+                    Rinitvec, V0vec, V0)    # ジャイロ→回転中心の順に
+            else:
+                result[i, 3:9] = rk4(Rinitvec, V0vec, V0)   # 回転中心だけ
+
         result[i, 9] = vdotn
         i += 1
 
-    if np.random.rand() >= 0.85:    # ときどき計算時間を表示する
+    """
+    if np.random.rand() > 0.95:    # ときどき計算時間を表示する
         with objmode():
             print('A BIN DONE [sec]: ',  (time.perf_counter() - start0))
+    """
 
     return result
 
@@ -852,6 +1279,9 @@ tsize = int(t_len/dt)
 #
 # %% main関数
 def main():
+    # sendAddress = input('EMAIL ADRESS: ')
+    # pwd = getpass('PASSWORD: ')
+
     # 初期座標
     mcolatr = meshcolat.reshape(meshcolat.size)  # 1次元化
     mlongr = meshlong.reshape(meshlong.size)  # 1次元化
@@ -859,9 +1289,14 @@ def main():
     total_s = time.time()
 
     for i in range(len(eV_array)):
-        savename = 'gc301_'+str(eV_array[i])+'ev_alp_'+str(alp)+'_'+date+'.txt'
+        savename = 'gc301_'+date+'_'+str(eV_array[i])+'ev_alp_'+str(alp)+'.txt'
+
+        vabs = math.sqrt((eV_array[i]/me)*2*float(1.602E-19))
+        gyroradius = (me*vabs)/(np.abs(e)*Babs(np.array([9.6*RJ, 0, 0])))
 
         # 情報表示
+        print('V0 [km/s]: {:>2f}'.format(vabs/1000))
+        print('gyro radius [m]: {:>2f}'.format(gyroradius))
         print('alpha: {:>7d}'.format(alpha_array.size))
         print('ncolat: {:>7d}'.format(ncolat))
         print('nphi: {:>7d}'.format(nphi))
@@ -874,10 +1309,10 @@ def main():
 
         # 並列計算の実行
         start = time.time()
-        with Pool(processes=8) as pool:
+        with Pool(processes=CORES) as pool:
             result_list = list(pool.starmap(calc, args))
         stop = time.time()
-        print('%.3f seconds' % (stop - start))
+        print('%.3f sec' % (stop - start))
 
         # 返り値(配列 *行8列)
         # 結果をreshape
@@ -916,20 +1351,21 @@ def main():
         """
 
         # 情報表示
-        print('alpha: {:>7d}'.format(alpha_array.size))
-        print('ncolat: {:>7d}'.format(ncolat))
-        print('nphi: {:>7d}'.format(nphi))
-        print('total: {:>7d}'.format(alpha_array.size*ncolat*nphi))
-        # print('magnetic equator: {:>7d}'.format(mageq.shape))
-        print(savename)
+        # print('alpha: {:>7d}'.format(alpha_array.size))
+        # print('ncolat: {:>7d}'.format(ncolat))
+        # print('nphi: {:>7d}'.format(nphi))
+        # print('total: {:>7d}'.format(alpha_array.size*ncolat*nphi))
+        print('allowed: {:>7d}'.format(mageq.shape[0]))
+        # print(savename)
 
         # メモリ消去
         del result_list, result, yn1, mageq
 
-        print(str(eV_array[i])+'eV is done.')
+        # print(str(eV_array[i])+'eV is done.')
         print('===================================')
 
-    print('%.3f seconds' % (time.time() - total_s))
+    print('%.3f sec' % (time.time() - total_s))
+    # MAIL(sendAddress, pwd, round(time.time() - total_s))
 
     return 0
 
