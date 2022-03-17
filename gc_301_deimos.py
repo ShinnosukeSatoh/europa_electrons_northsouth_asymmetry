@@ -92,9 +92,9 @@ CORES = 18             # NUMBER OF CPU CORES TO USE
 #
 #
 # %% SETTINGS FOR THE NEXT EXECUTION
-date = '20220312e'
+date = '20220315e'
 eV_array = np.array([
-    # 1, 2, 3, 4, 5,
+    1, 2, 3, 4, 5,
     6, 7, 8, 9, 10,
     15, 20, 25, 30, 40, 50, 60, 70, 80, 90,
     100, 200, 300,
@@ -102,7 +102,7 @@ eV_array = np.array([
     1000, 2000, 3000, 4000, 5000, 6000, 7000,
     10000, 20000  # , 30000, 40000, 50000, 70000
 ])    # [eV]
-alp = 0.025
+alp = 0.0125
 lam = 10.0        # degrees
 
 
