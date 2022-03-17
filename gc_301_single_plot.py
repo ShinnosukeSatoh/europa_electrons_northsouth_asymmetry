@@ -15,6 +15,17 @@ color = ['#6667AB', '#0F4C81', '#5B6770', '#FF6F61', '#645394',
          '#84BD00', '#F6BE00', '#F7CAC9', '#16137E', '#45B8AC']
 
 
+richtext = input('rich text (y) or (n): ')
+if richtext == 'y':
+    plt.rcParams['text.usetex'] = True
+    plt.rcParams['text.latex.preamble'] = r'\usepackage{helvet} \usepackage{sansmath} \sansmath \usepackage{siunitx} \sisetup{detect-all}'
+    #    \usepackage{helvet}     # helvetica font
+    #    \usepackage{sansmath}   # math-font matching  helvetica
+    #    \sansmath               # actually tell tex to use it!
+    #    \usepackage{siunitx}    # micro symbols
+    #    \sisetup{detect-all}    # force siunitx to use the fonts
+
+
 #
 #
 # %% SETTINGS FOR THE NEXT EXECUTION
