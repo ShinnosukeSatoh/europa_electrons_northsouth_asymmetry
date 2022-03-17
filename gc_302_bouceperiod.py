@@ -54,6 +54,8 @@ Version
 
 
 # %% ライブラリのインポート
+import matplotlib as mpl
+from matplotlib import rcParams
 from numba import jit
 # from numba import objmode
 # from numba.experimental import jitclass
@@ -75,6 +77,17 @@ import time
 # FAVORITE COLORS (FAVOURITE COLOURS?)
 color = ['#6667AB', '#0F4C81', '#5B6770', '#FF6F61', '#645394',
          '#84BD00', '#F6BE00', '#F7CAC9', '#16137E', '#45B8AC']
+
+
+richtext = input('rich text (y) or (n): ')
+if richtext == 'y':
+    plt.rcParams['text.usetex'] = True
+    plt.rcParams['text.latex.preamble'] = r'\usepackage{helvet} \usepackage{sansmath} \sansmath \usepackage{siunitx} \sisetup{detect-all}'
+    #    \usepackage{helvet}     # helvetica font
+    #    \usepackage{sansmath}   # math-font matching  helvetica
+    #    \sansmath               # actually tell tex to use it!
+    #    \usepackage{siunitx}    # micro symbols
+    #    \sisetup{detect-all}    # force siunitx to use the fonts
 
 
 #
@@ -99,7 +112,10 @@ Eeq = np.array([
     100, 200, 300,
     400, 500, 700,
     1000, 2000, 3000, 4000, 5000, 6000, 7000,
-    10000, 20000, 30000, 40000, 50000, 70000
+    10000, 20000, 30000, 40000, 50000, 70000,
+    1E+5, 2E+5, 3E+5, 5E+5, 7E+5,
+    1E+6, 2E+6, 3E+6, 5E+6, 7E+6,
+    1E+7, 2E+7, 3E+7, 5E+7, 7E+7,
 ])                # unit: eV
 alp = 0.025
 lam = 10.0        # degrees
@@ -286,7 +302,7 @@ def ax_bounce(veq, tau0, tau1):
     ax[1].plot(veq, tau0*100*0.1, color=color[6], label='$\\alpha=0.1$')
     ax[1].plot(veq, tau0*100*0.05, color=color[7], label='$\\alpha=0.05$')
     ax[1].plot(veq, tau0*100*0.025, color=color[8], label='$\\alpha=0.025$')
-    ax[1].axhspan(0, 1500, color="olive", alpha=0.2)  # 0<y<1500を塗りつぶす
+    ax[1].axhspan(0, 1560*2, color="olive", alpha=0.2)  # 0<y<1500を塗りつぶす
     ax[1].legend()
 
     ax[2].set_title('Pitch angle $45^\\circ$', fontsize=12)
@@ -294,14 +310,14 @@ def ax_bounce(veq, tau0, tau1):
     ax[2].set_ylabel('Convection [km]', fontsize=12)
     ax[2].set_xscale('log')
     ax[2].set_xlim([1, np.max(veq)])
-    ax[2].set_ylim([0, 20000])
+    ax[2].set_ylim([0, 30000])
     ax[2].plot(veq, tau0*100, color=color[3], label='$\\alpha=1$')
     ax[2].plot(veq, tau0*100*0.5, color=color[4], label='$\\alpha=0.5$')
     ax[2].plot(veq, tau0*100*0.25, color=color[5], label='$\\alpha=0.25$')
     ax[2].plot(veq, tau0*100*0.1, color=color[6], label='$\\alpha=0.1$')
     ax[2].plot(veq, tau0*100*0.05, color=color[7], label='$\\alpha=0.05$')
     ax[2].plot(veq, tau0*100*0.025, color=color[8], label='$\\alpha=0.025$')
-    ax[2].axhspan(0, 1500, color="olive", alpha=0.2)  # 0<y<1500を塗りつぶす
+    ax[2].axhspan(0, 1560*2, color="olive", alpha=0.2)  # 0<y<1500を塗りつぶす
     ax[2].legend()
     # ax_r = ax.twinx()
     # ax_r.set_ylabel('Bouce Period $\\times 0.5$ [s]', fontsize=12)
