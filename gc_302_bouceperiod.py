@@ -1,7 +1,7 @@
 """ gc_302_bounceperiod.py
 
 Created on Mon Mar 14 10:48 2022
-@author: Shin Sato
+@author: Shin Satoh
 
 Description:
 This program is intended to numerically solve the equation (30)

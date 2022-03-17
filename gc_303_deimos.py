@@ -1,7 +1,7 @@
 """ gc_303_deimos.py
 
 Created on Wed Mar 16 20:49:00 2022
-@author: Shin Sato
+@author: Shin Satoh
 
 Description:
 This program is intended to numerically solve the equation (30)
