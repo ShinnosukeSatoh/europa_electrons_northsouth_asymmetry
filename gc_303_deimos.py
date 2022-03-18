@@ -58,7 +58,7 @@ Version
 
 # %% ライブラリのインポート
 from numba import jit
-from numba import objmode
+# from numba import objmode
 # from numba.experimental import jitclass
 import numpy as np
 import math
@@ -72,7 +72,7 @@ from multiprocessing import Pool
 import smtplib
 from email.mime.text import MIMEText
 from email.utils import formatdate
-from getpass import getpass
+# from getpass import getpass
 
 
 # FAVORITE COLORS (FAVOURITE COLOURS?)
@@ -94,13 +94,13 @@ CORES = 18             # NUMBER OF CPU CORES TO USE
 #
 #
 # %% SETTINGS FOR THE NEXT EXECUTION
-date = '20220317e'
+date = '20220318e'
 eV_array = np.array([
     2, 4, 6, 8, 10,
     12, 14, 16, 18, 20,
     25, 30, 40, 50, 60, 80, 100,
     200, 300, 400, 500, 600, 800, 1000,
-    2500, 5000, 7500, 10000, 25000
+    2500, 5000, 7500, 10000
 ])    # [eV]
 alp = 0.05
 lam = 10.0        # degrees
@@ -908,7 +908,7 @@ def rk4_hybrid(Rinitvec, V0vec, V0):
     # Gyro Period
     B = Babs(Rvec)
     TC = 2*np.pi*me/(np.abs(e)*B)
-    dt = FORWARD_BACKWARD*TC/(360)   # ジャイロを100分割するような時間刻み
+    dt = FORWARD_BACKWARD*TC/(180)   # ジャイロを180分割するような時間刻み
     dt2 = dt*0.5
 
     # Gyro Radius
@@ -1036,7 +1036,7 @@ def rk4_hybrid(Rinitvec, V0vec, V0):
             TC = 2*np.pi*me/(np.abs(e)*Babs(Rvec))
 
             # 時間刻みの更新
-            dt = FORWARD_BACKWARD*TC*60
+            dt = FORWARD_BACKWARD*TC*80
             dt2 = 0.5*dt
 
             # 時刻更新
@@ -1053,19 +1053,15 @@ def rk4_hybrid(Rinitvec, V0vec, V0):
             if (RV[2] < z_p) and (RV2[2] > z_p):
                 # print('UPPER')
                 RV2 = comeback(RV2, req, z_p_rad, K0)
-                Rvec = RV2[0:3] + R0vec
-                L = math.sqrt(Rvec[0]**2 + Rvec[1]**2 + Rvec[2]**2)/RJ
-                if L < 9.5:
-                    print('L: ', L)
+                # Rvec = RV2[0:3] + R0vec
+                # L = math.sqrt(Rvec[0]**2 + Rvec[1]**2 + Rvec[2]**2)/RJ
+                # if L < 9.5:
+                #    print('L: ', L)
 
             # 南側しきい値
             if (RV[2] > z_m) and (RV2[2] < z_m):
                 # print('LOWER')
                 RV2 = comeback(RV2, req, z_m_rad, K0)
-                Rvec = RV2[0:3] + R0vec
-                L = math.sqrt(Rvec[0]**2 + Rvec[1]**2 + Rvec[2]**2)/RJ
-                if L < 9.5:
-                    print('L: ', L)
 
             # 磁気赤道面到達(これをプラズマシート中心にしたいんだけど...!)
             if (((RV[2] >= 0) and (RV2[2] < 0))           # 通過方向: N → S
@@ -1174,9 +1170,10 @@ def calc(mcolatr, mlongr, V0):
             math.cos(math.radians(-lam))
         ])
 
-        # 初期座標ベクトル(10km=1E+5m 上空に設定) =================
+        # 初期座標ベクトル(1m 上空に設定) =================
         # 表面への再衝突判定はもちろん表面で行う
-        Rinitvec = (RE+(1E+5))*nvec
+        Rinitvec = (RE+1)*nvec
+        # print(np.sqrt(Rinitvec[0]**2 + Rinitvec[1]**2 + Rinitvec[2]**2)/RE)
 
         # Trace座標系に
         Rinitvec += np.array([eurx, eury, eurz])
