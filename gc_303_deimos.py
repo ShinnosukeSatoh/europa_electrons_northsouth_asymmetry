@@ -58,7 +58,7 @@ Version
 
 # %% ライブラリのインポート
 from numba import jit
-# from numba import objmode
+from numba import objmode
 # from numba.experimental import jitclass
 import numpy as np
 import math
@@ -89,12 +89,13 @@ ION_ELECTRON = 0       # 0=ELECTRON, 1=ION
 Z = 2                  # CHARGE (-1 for ELECTRON)
 U = 32                 # ATOMIC MASS (32 for SULFUR)
 CORES = 18             # NUMBER OF CPU CORES TO USE
+ALTITUDE = 2           # ALTITUDE OF STARTING POINTS [m]
 
 
 #
 #
 # %% SETTINGS FOR THE NEXT EXECUTION
-date = '20220318e'
+date = '20220322e_94_4'
 eV_array = np.array([
     2, 4, 6, 8, 10,
     12, 14, 16, 18, 20,
@@ -102,7 +103,7 @@ eV_array = np.array([
     200, 300, 400, 500, 600, 800, 1000,
     2500, 5000, 7500, 10000
 ])    # [eV]
-alp = 0.05
+alp = 0.075
 lam = 10.0        # degrees
 
 
@@ -148,26 +149,20 @@ A3 = 4*3.1415*me/(mu*Mdip*e)     # ドリフト速度の係数
 #
 #
 # %% EUROPA POSITION (DETERMINED BY MAGNETIC LATITUDE)
-# lam = 10.0  # =============== !!! ==============
-L96 = 9.6*RJ  # Europa公転軌道 L値
+L94 = 9.4*RJ  # Europaと木星中心の距離
 
 
 # 木星とtrace座標系原点の距離(x軸の定義)
-# Europaの中心を通る磁力線の脚(磁気赤道面)
-R0 = L96*(np.cos(np.radians(lam)))**(-2)
+R0 = L94*(np.cos(np.radians(lam)))**(-2)
 R0x = R0
 R0y = 0
 R0z = 0
 R0vec = np.array([R0x, R0y, R0z])
 
-# 初期条件座標エリアの範囲(木星磁気圏動径方向 最大と最小 phiJ=0で決める)
-r_ip = (L96+1.15*RE)*(math.cos(math.radians(lam)))**(-2)
-r_im = (L96-1.15*RE)*(math.cos(math.radians(lam)))**(-2)
-
 # Europaのtrace座標系における位置
-eurx = L96*math.cos(math.radians(lam)) - R0x
+eurx = L94*math.cos(math.radians(lam)) - R0x
 eury = 0 - R0y
-eurz = L96*math.sin(math.radians(lam)) - R0z
+eurz = L94*math.sin(math.radians(lam)) - R0z
 
 # 遠方しきい値(z方向) 磁気緯度で設定
 z_p_rad = math.radians(11.0)      # 北側
@@ -901,9 +896,9 @@ def rk4_hybrid(Rinitvec, V0vec, V0):
     Rvec = Rinitvec + R0vec
 
     # ダイポールからの距離(@磁気赤道面 近似)
-    r = math.sqrt(Rvec[0]**2 + Rvec[1]**2 + Rvec[2]**2)
-    req = r/(math.cos(math.radians(lam))**2)
-    # print('req: ', req/RJ)
+    # r = math.sqrt(Rvec[0]**2 + Rvec[1]**2 + Rvec[2]**2)
+    # req = r/(math.cos(math.radians(lam))**2)
+    req = ((Rvec[0]**2 + Rvec[2]**2)**(3/2)) / (Rvec[0]**2)
 
     # Gyro Period
     B = Babs(Rvec)
@@ -942,7 +937,7 @@ def rk4_hybrid(Rinitvec, V0vec, V0):
             (r3d2[2]-eurz)**2
         )
 
-        # Europaに再衝突
+        # Europaに再衝突(地表面)
         if r_eur < RE:
             yn = 0
             # print('Collide 1')
@@ -954,7 +949,7 @@ def rk4_hybrid(Rinitvec, V0vec, V0):
         # 時刻更新
         t += FORWARD_BACKWARD*dt
         # Europaの近傍を出た
-        if r_eur > (RE + 10*gyroradius):
+        if r_eur > (RE+ALTITUDE+(12*gyroradius)):
             # print('k:', k)
             break
 
@@ -1172,7 +1167,7 @@ def calc(mcolatr, mlongr, V0):
 
         # 初期座標ベクトル(1m 上空に設定) =================
         # 表面への再衝突判定はもちろん表面で行う
-        Rinitvec = (RE+1)*nvec
+        Rinitvec = (RE+ALTITUDE)*nvec
         # print(np.sqrt(Rinitvec[0]**2 + Rinitvec[1]**2 + Rinitvec[2]**2)/RE)
 
         # Trace座標系に
