@@ -95,7 +95,7 @@ ALTITUDE = 2           # ALTITUDE OF STARTING POINTS [m]
 #
 #
 # %% SETTINGS FOR THE NEXT EXECUTION
-date = '20220322e_94_4'
+date = '20220322e_94_5'
 eV_array = np.array([
     2, 4, 6, 8, 10,
     12, 14, 16, 18, 20,
@@ -103,7 +103,7 @@ eV_array = np.array([
     200, 300, 400, 500, 600, 800, 1000,
     2500, 5000, 7500, 10000
 ])    # [eV]
-alp = 0.075
+alp = 1
 lam = 10.0        # degrees
 
 
@@ -923,7 +923,7 @@ def rk4_hybrid(Rinitvec, V0vec, V0):
 
     # ルンゲクッタ(ジャイロ)
     # print('GYRO STARTS')
-    for k in range(5000000000000000000):
+    for k in range(6000000000000000000):
         f1 = ode1(r3d, t)
         f2 = ode1(r3d+dt2*f1, t+dt2)
         f3 = ode1(r3d+dt2*f2, t+dt2)
@@ -938,7 +938,7 @@ def rk4_hybrid(Rinitvec, V0vec, V0):
         )
 
         # Europaに再衝突(地表面)
-        if r_eur < RE:
+        if r_eur <= RE:
             yn = 0
             # print('Collide 1')
             break
@@ -947,15 +947,16 @@ def rk4_hybrid(Rinitvec, V0vec, V0):
         r3d = r3d2
 
         # 時刻更新
-        t += FORWARD_BACKWARD*dt
+        # t += FORWARD_BACKWARD*dt
         # Europaの近傍を出た
-        if r_eur > (RE+ALTITUDE+(12*gyroradius)):
+        if r_eur > (RE+ALTITUDE+(20*gyroradius)):
             # print('k:', k)
             break
 
         # if abs(r3d2[2]-eurz) > 1.2*RE:
         #     break
 
+    t = 0
     if yn == 1:  # 有効な粒子
         # 木星原点座標(r3dはtrace座標系)
         Rvec = r3d[0:3] + R0vec
