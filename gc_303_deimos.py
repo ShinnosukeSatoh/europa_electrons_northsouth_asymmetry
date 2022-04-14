@@ -52,6 +52,7 @@ EMISSIONS.
 
 Version
 1.0.0 (Mar 16, 2022)
+1.1.0 (Apr 14, 2022) Io compatible
 
 """
 
@@ -83,19 +84,21 @@ color = ['#6667AB', '#0F4C81', '#5B6770', '#FF6F61', '#645394',
 #
 #
 # %% TOGGLE
-FORWARD_BACKWARD = -1  # 1=FORWARD, -1=BACKWARD
-GYRO = 1               # 0=GUIDING CENTER, 1=GYRO MOTION
-ION_ELECTRON = 0       # 0=ELECTRON, 1=ION
-Z = 2                  # CHARGE (-1 for ELECTRON)
-U = 32                 # ATOMIC MASS (32 for SULFUR)
-CORES = 18             # NUMBER OF CPU CORES TO USE
-ALTITUDE = 2           # ALTITUDE OF STARTING POINTS [m]
+MOON = 'IO'                    # IO, EUROPA, GANYMEDE
+FORWARD_BACKWARD = -1          # 1=FORWARD, -1=BACKWARD
+GYRO = 1                       # 0=GUIDING CENTER, 1=GYRO MOTION
+ION_ELECTRON = 0               # 0=ELECTRON, 1=ION
+Z = 2                          # CHARGE (-1 for ELECTRON)
+U = 32                         # ATOMIC MASS (32 for SULFUR)
+CORES = 18                     # NUMBER OF CPU CORES TO USE
+ALTITUDE = 2                   # ALTITUDE OF STARTING POINTS [m]
+ALFVEN_THETA = np.radians(10)  # ANGLE BETWEEN B0 VECTOR AND ALFVEN WING
 
 
 #
 #
 # %% SETTINGS FOR THE NEXT EXECUTION
-date = '20220322e_94_5'
+date = '20220414e_IO_1'
 eV_array = np.array([
     2, 4, 6, 8, 10,
     12, 14, 16, 18, 20,
@@ -103,17 +106,26 @@ eV_array = np.array([
     200, 300, 400, 500, 600, 800, 1000,
     2500, 5000, 7500, 10000
 ])    # [eV]
-alp = 1
+alp = 0.12
 lam = 10.0        # degrees
 
 
 #
 #
 # %% CONSTANTS
-RJ = float(7E+7)        # Jupiter半径   単位: m
-mJ = float(1.90E+27)    # Jupiter質量   単位: kg
-RE = float(1.56E+6)     # Europa半径    単位: m
-mE = float(4.8E+22)     # Europa質量    単位: kg
+RJ = 7E+7               # Jupiter半径   単位: m
+mJ = 1.90E+27           # Jupiter質量   単位: kg
+
+if MOON == 'IO':
+    RE = 1.82E+6        # 衛星半径    単位: m
+    mE = 8.94E+22       # 衛星質量    単位: kg
+    L94 = 5.9*RJ        # 衛星と木星中心の距離 単位: km
+    omgE = 4.1105E-5    # 衛星の公転角速度 単位: rad s^-1
+elif MOON == 'EUROPA':
+    RE = 1.56E+6        # 衛星半径    単位: m
+    mE = 4.8E+22        # 衛星質量    単位: kg
+    L94 = 9.4*RJ        # 衛星と木星中心の距離 単位: km
+    omgE = 2.0478E-5    # 衛星の公転角速度 単位: rad s^-1
 
 c = float(3E+8)         # 真空中光速    単位: m/s
 G = float(6.67E-11)     # 万有引力定数  単位: m^3 kg^-1 s^-2
@@ -123,14 +135,13 @@ me = float(9.1E-31)     # 電子質量   単位: kg
 if ION_ELECTRON == 1:
     me = me*1836*U      # 荷電粒子質量 単位: kg
     print(me)
-e = Z*float(1.6E-19)    # 電荷      単位: C
+e = Z*float(1.6E-19)    # 電荷 単位: C
 
-mu = float(1.26E-6)     # 真空中透磁率  単位: N A^-2 = kg m s^-2 A^-2
-Mdip = float(1.6E+27)   # Jupiterのダイポールモーメント 単位: A m^2
-omgJ = float(1.74E-4)   # 木星の自転角速度 単位: rad/s
-omgE = float(2.05E-5)   # Europaの公転角速度 単位: rad/s
-omgR = omgJ-omgE        # 木星のEuropaに対する相対的な自転角速度 単位: rad/s
-omgR = omgR*alp
+mu = 1.26E-6            # 真空中透磁率  単位: N A^-2 = kg m s^-2 A^-2
+Mdip = 1.6E+27          # Jupiterのダイポールモーメント 単位: A m^2
+omgJ = 1.75868E-4       # 木星の自転角速度 単位: rad/s
+omgR = omgJ-omgE        # 木星の衛星に対する相対的な自転角速度 単位: rad/s
+omgR = omgR*alp         # 減速した共回転の角速度 単位: rad/s
 eomg = np.array([-np.sin(np.radians(lam)),
                  0., np.cos(np.radians(lam))])
 omgRvec = omgR*eomg
@@ -143,13 +154,7 @@ A1 = e/me                        # 運動方程式内の定数
 A2 = (mu*Mdip)/(4*np.pi)         # ダイポール磁場表式内の定数
 # A1 = float(-1.7582E+11)        # 運動方程式内の定数
 # A2 = 1.60432E+20               # ダイポール磁場表式内の定数
-A3 = 4*3.1415*me/(mu*Mdip*e)     # ドリフト速度の係数
-
-
-#
-#
-# %% EUROPA POSITION (DETERMINED BY MAGNETIC LATITUDE)
-L94 = 9.4*RJ  # Europaと木星中心の距離
+A3 = 4*3.141592*me/(mu*Mdip*e)   # ドリフト速度の係数
 
 
 # 木星とtrace座標系原点の距離(x軸の定義)
@@ -167,7 +172,7 @@ eurz = L94*math.sin(math.radians(lam)) - R0z
 # 遠方しきい値(z方向) 磁気緯度で設定
 z_p_rad = math.radians(11.0)      # 北側
 z_p = R0*math.cos(z_p_rad)**2 * math.sin(z_p_rad)
-z_m_rad = math.radians(2.0)      # 南側
+z_m_rad = math.radians(2.0)       # 南側
 z_m = -R0*math.cos(z_m_rad)**2 * math.sin(z_m_rad)
 
 
@@ -460,6 +465,25 @@ def Rho(Rvec):
 
 #
 #
+# %% Alfven wing tube
+@jit('UniTuple(f8,3)(f8,f8,f8)', nopython=True, fastmath=True)
+def Alfven_tube(x, y, z):
+    """
+    `x` ... x position of a particle \\
+    `y` ... y position of a particle \\
+    `z` ... z position of a particle
+    """
+
+    # tubeの中心
+    tubex = eurx
+    tubey = z*np.tan(ALFVEN_THETA)
+    tubez = z
+
+    return tubex, tubey, tubez
+
+
+#
+#
 # %% シミュレーションボックスの外に出た粒子の復帰座標を計算
 @jit('f8[:](f8[:],f8,f8,f8)', nopython=True, fastmath=True)
 def comeback(RV2, req, lam0, K0):
@@ -467,7 +491,8 @@ def comeback(RV2, req, lam0, K0):
     `RV2` ... <ndarray> trace座標系 \\
     `req` ... ダイポールからの距離(@磁気赤道面) \\
     `lam0` ... スタートの磁気緯度 \\
-    `K0` ... 保存量
+    `K0` ... 保存量 \\
+    上下とも、ボックスの外に出るときにはその場の磁場はダイポール磁場に等しい
     """
     # trace座標系から木星原点位置ベクトルに変換
     Rvec = RV2[0:3] + R0vec
@@ -545,7 +570,7 @@ def comeback(RV2, req, lam0, K0):
 
     # 共回転復帰座標
     tau = FORWARD_BACKWARD*2*tau0
-    Rvec_new = Corotation(Rvec, omgR*tau)    # 復帰座標ベクトル
+    Rvec_new = Corotation(Rvec, omg*tau)    # 復帰座標ベクトル
 
     # 復帰座標における共回転速度ベクトル
     bvec = Bfield(Rvec_new)/Babs(Rvec_new)
@@ -1126,11 +1151,9 @@ class RK4:
 # %% トレースを行うfunction
 @jit(nopython=True, fastmath=True)
 def calc(mcolatr, mlongr, V0):
-    """
     # time.time() はそのままじゃ使えない
     with objmode(start0='f8'):
         start0 = time.perf_counter()
-    """
 
     # result[:, 0] ... 出発点 x座標
     # result[:, 1] ... 出発点 y座標
@@ -1230,11 +1253,9 @@ def calc(mcolatr, mlongr, V0):
         result[i, 9] = vdotn
         i += 1
 
-    """
     if np.random.rand() > 0.85:    # ときどき計算時間を表示する
         with objmode():
             print('A BIN DONE [sec]: ',  (time.perf_counter() - start0))
-    """
 
     return result
 
