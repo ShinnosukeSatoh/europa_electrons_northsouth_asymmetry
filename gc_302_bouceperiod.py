@@ -302,7 +302,7 @@ def ax_bounce(veq, tau0, tau1):
     ax[1].plot(veq, tau0*100*0.1, color=color[6], label='$\\alpha=0.1$')
     ax[1].plot(veq, tau0*100*0.05, color=color[7], label='$\\alpha=0.05$')
     ax[1].plot(veq, tau0*100*0.025, color=color[8], label='$\\alpha=0.025$')
-    ax[1].axhspan(0, 1560*2, color="olive", alpha=0.2)  # 0<y<1500を塗りつぶす
+    ax[1].axhspan(0, (RE/1000)*2, color="olive", alpha=0.2)  # 0<y<1500を塗りつぶす
     ax[1].legend()
 
     ax[2].set_title('Pitch angle $45^\\circ$', fontsize=12)
@@ -317,7 +317,7 @@ def ax_bounce(veq, tau0, tau1):
     ax[2].plot(veq, tau0*100*0.1, color=color[6], label='$\\alpha=0.1$')
     ax[2].plot(veq, tau0*100*0.05, color=color[7], label='$\\alpha=0.05$')
     ax[2].plot(veq, tau0*100*0.025, color=color[8], label='$\\alpha=0.025$')
-    ax[2].axhspan(0, 1560*2, color="olive", alpha=0.2)  # 0<y<1500を塗りつぶす
+    ax[2].axhspan(0, (RE/1000)*2, color="olive", alpha=0.2)  # 0<y<1500を塗りつぶす
     ax[2].legend()
     # ax_r = ax.twinx()
     # ax_r.set_ylabel('Bouce Period $\\times 0.5$ [s]', fontsize=12)
