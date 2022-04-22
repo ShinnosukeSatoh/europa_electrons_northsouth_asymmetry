@@ -53,6 +53,7 @@ EMISSIONS.
 Version
 1.0.0 (Mar 16, 2022)
 1.1.0 (Apr 14, 2022) Io compatible
+1.2.0 (Apr 22, 2022) Ip velocity field added
 
 """
 
@@ -73,6 +74,8 @@ from multiprocessing import Pool
 import smtplib
 from email.mime.text import MIMEText
 from email.utils import formatdate
+
+from sympy import E
 # from getpass import getpass
 
 
@@ -84,29 +87,30 @@ color = ['#6667AB', '#0F4C81', '#5B6770', '#FF6F61', '#645394',
 #
 #
 # %% TOGGLE
-MOON = 'IO'                    # IO, EUROPA, GANYMEDE
+MOON = 'EUROPA'                    # IO, EUROPA, GANYMEDE
 FORWARD_BACKWARD = -1          # 1=FORWARD, -1=BACKWARD
 GYRO = 1                       # 0=GUIDING CENTER, 1=GYRO MOTION
 ION_ELECTRON = 0               # 0=ELECTRON, 1=ION
 Z = 2                          # CHARGE (-1 for ELECTRON)
 U = 32                         # ATOMIC MASS (32 for SULFUR)
-CORES = 18                     # NUMBER OF CPU CORES TO USE
-ALTITUDE = 2                   # ALTITUDE OF STARTING POINTS [m]
+CORES = 79                     # NUMBER OF CPU CORES TO USE (1 - 79)
+ALTITUDE = 10                  # ALTITUDE OF STARTING POINTS [m]
 ALFVEN_THETA = np.radians(10)  # ANGLE BETWEEN B0 VECTOR AND ALFVEN WING
 
 
 #
 #
 # %% SETTINGS FOR THE NEXT EXECUTION
-date = '20220414e_IO_1'
+date = '20220420e_EUROPA_test4'
 eV_array = np.array([
     2, 4, 6, 8, 10,
     12, 14, 16, 18, 20,
     25, 30, 40, 50, 60, 80, 100,
     200, 300, 400, 500, 600, 800, 1000,
-    2500, 5000, 7500, 10000
+    2500, 5000, 7500,
+    10000
 ])    # [eV]
-alp = 0.12
+alp = 0.05
 lam = 10.0        # degrees
 
 
@@ -181,7 +185,7 @@ z_m = -R0*math.cos(z_m_rad)**2 * math.sin(z_m_rad)
 # %% 初期位置エリア(z=0)での速度ベクトル (つまり磁気赤道面でのピッチ角)
 # V0 = math.sqrt((energy/me)*2*float(1.602E-19))
 V0_array = np.sqrt((eV_array/me)*2*float(1.602E-19))    # ndarray
-pitch = int(60)  # 0-180度を何分割するか
+pitch = int(45)  # 0-180度を何分割するか
 loss = 0.1     # Loss cone
 alphaeq0 = np.radians(np.linspace(loss, 180-loss, int(pitch+1)))
 alpha_array = (alphaeq0[1:] + alphaeq0[:-1])/2  # the middle values
@@ -191,8 +195,8 @@ d_alpha = np.abs(alpha_array[1]-alpha_array[0])
 #
 #
 # %% Europa表面の初期座標
-ncolat = 40  # 分割数
-nphi = 80    # 分割数
+ncolat = 30  # 分割数
+nphi = 60    # 分割数
 long_array = np.radians(np.linspace(0, 360, nphi+1))
 colat_array = np.radians(np.linspace(0, 180, ncolat+1))
 # 動径方向の中点
@@ -335,6 +339,8 @@ def Corotation(Rvec, theta):
         Rmatrix[2, 0]*Rvec[0] + Rmatrix[2, 1]*Rvec[1] + Rmatrix[2, 2]*Rvec[2],
     ])
 
+    Rvec_new[2] = Rvec[2]
+
     return Rvec_new
 
 
@@ -373,6 +379,52 @@ def Babs(Rvec):
     B = math.sqrt(Bvec[0]**2 + Bvec[1]**2 + Bvec[2]**2)
 
     return B
+
+
+#
+#
+# %% 電場
+E0 = (L94*omgE)*Babs(np.array([eurx, eury, eurz])+R0vec)
+E1 = alp*E0
+
+
+def Efield(RV):
+    """
+    `RV` ... <ndarray> trace座標系 位置ベクトル
+    """
+    # 衛星との相対座標
+    x = RV[0] - eurx
+    y = RV[1] - eury
+    z = RV[2] - eurz
+
+    # y軸まわりにlamだけ回転(Z軸は衛星の南北に平行)
+    lam_r = math.radians(lam)
+    X = x*math.cos(lam_r)+z*math.sin(lam_r)
+    Y = y
+    # Z = -x*math.sin(lam_r)+z*math.cos(lam_r)
+
+    # 衛星からの距離の二乗(円筒)
+    R2 = X**2 + Y**2
+
+    # Inside
+    RC = RE
+    if R2 <= RC**2:
+        EX = E1  # 符号あってる?
+        EY = 0
+        EZ = 0
+
+    # Outside
+    elif R2 > RC**2:
+        EX = -E0 + (E0-E1)*(RC**2)*(X+Y)*(Y-X)/(R2**2)
+        EY = -(E0-E1)*(RC**2)*(2*X*Y)/(R2**2)
+        EZ = 0
+
+    # y軸まわりに-lamだけ回転
+    Ex = EX*math.cos(-lam_r)+EZ*math.sin(-lam_r)
+    Ey = EY
+    Ez = -EX*math.sin(-lam_r)+EZ*math.cos(-lam_r)
+
+    return np.array([Ex, Ey, Ez])
 
 
 #
@@ -418,11 +470,66 @@ def Vdvector(Rvec):
     """
     `Rvec` ... <ndarray> ダイポール原点の位置ベクトル
     """
+
     Vdvec = np.array([
         omgRvec[1]*Rvec[2] - omgRvec[2]*Rvec[1],
         omgRvec[2]*Rvec[0] - omgRvec[0]*Rvec[2],
         omgRvec[0]*Rvec[1] - omgRvec[1]*Rvec[0]
     ])
+
+    # Ip 1995 Velocity
+    RV = Rvec - R0vec   # Europa中心座標系
+
+    # 衛星との相対座標
+    x = RV[0] - eurx
+    y = RV[1] - eury
+    z = RV[2] - eurz
+
+    # y軸まわりにlamだけ回転(Z軸は衛星の南北に平行)
+    lam_r = -math.radians(lam)
+    X = x*math.cos(lam_r)+z*math.sin(lam_r)
+    Y = y
+    # Z = -x*math.sin(lam_r)+z*math.cos(lam_r)
+
+    # 衛星からの距離の二乗(円筒)
+    R2 = math.sqrt(X**2 + Y**2)
+
+    # Inside
+    RC = RE    # 衛星表面からALTITUDE[m]
+
+    # Inside
+    V0 = math.sqrt((Rvec[0]**2)+(Rvec[1]**2)+(Rvec[2]**2))*(omgJ-omgE)
+    if R2 <= RC**2:
+        VX = 0
+        VY = V0*alp
+        # VZ = 0
+        # print('INSIDE')
+
+        # y軸まわりに-lamだけ回転
+        Vx = VX*math.cos(-lam_r)  # +VZ*math.sin(-lam_r)
+        Vy = VY
+        Vz = -VX*math.sin(-lam_r)  # +VZ*math.cos(-lam_r)
+        Vdvec = np.array([Vx, Vy, Vz])
+
+    # Outside
+    elif (R2 > RC**2) and (R2 <= (4*RC)**2):
+        VY = V0 + (1-alp)*V0*((RC/R2)**2)*(1-2*((Y/R2)**2))
+        VX = -2*(1-alp)*V0*((RC/R2)**2)*(X*Y)/(R2**2)
+        # VZ = 0
+        # print('OUTSIDE')
+
+        # y軸まわりに-lamだけ回転
+        Vx = VX*math.cos(-lam_r)  # +VZ*math.sin(-lam_r)
+        Vy = VY
+        Vz = -VX*math.sin(-lam_r)  # +VZ*math.cos(-lam_r)
+        Vdvec = np.array([Vx, Vy, Vz])
+
+    elif R2 > (4*RC)**2:
+        Vdvec = np.array([
+            omgRvec[1]*Rvec[2] - omgRvec[2]*Rvec[1],
+            omgRvec[2]*Rvec[0] - omgRvec[0]*Rvec[2],
+            omgRvec[0]*Rvec[1] - omgRvec[1]*Rvec[0]
+        ])
 
     return Vdvec
 
@@ -501,7 +608,8 @@ def comeback(RV2, req, lam0, K0):
     omg = omgR
 
     # 磁場ベクトルの単位ベクトル
-    bvec = Bfield(Rvec)/Babs(Rvec)
+    B0 = Babs(Rvec)
+    bvec = Bfield(Rvec)/B0
 
     # 共回転ドリフト速度
     Vdvec = Vdvector(Rvec)
@@ -512,13 +620,14 @@ def comeback(RV2, req, lam0, K0):
         2*K0/me - (RV2[3]-Vdpara)**2 + (Rho(Rvec)*omg)**2)
 
     # 速度ベクトルの磁場に平行な成分
-    vparallel = RV2[3]
+    vparallel = RV2[3]      # 粒子の速度 + ドリフト速度
+    vpara_particle = vparallel - Vdpara  # 粒子の速度のみ
 
     # 速さ更新(これあってる?)
     # v_new = math.sqrt(vparallel**2 + vperp**2)
     # + math.sqrt(Vdvec[0]**2 + Vdvec[1]**2 + Vdvec[2]**2)
     # veq = v_new  # これあってる?
-    veq = math.sqrt(2*K0/me + (Rho(Rvec)*omg)**2)
+    veq = math.sqrt(2*K0/me)  # + (Rho(Rvec)*omg)**2)
 
     """
     # 共回転ドリフト速度
@@ -573,17 +682,26 @@ def comeback(RV2, req, lam0, K0):
     Rvec_new = Corotation(Rvec, omg*tau)    # 復帰座標ベクトル
 
     # 復帰座標における共回転速度ベクトル
-    bvec = Bfield(Rvec_new)/Babs(Rvec_new)
+    B1 = Babs(Rvec_new)
+    bvec = Bfield(Rvec_new)/B1
     Vdvec = Vdvector(Rvec_new)
     Vdpara = vecdot(bvec, Vdvec)
     # Vdperp = math.sqrt(Vdvec[0]**2 + Vdvec[1]
-    #                   ** 2 + Vdvec[2]**2 - Vdpara**2)
-    # K1 = 0.5*me*((vparallel)**2 -
-    #              (Rho(Rvec_new)*omgR)**2 + (vperp+Vdperp)**2)
+    #                    ** 2 + Vdvec[2]**2 - Vdpara**2)
 
-    RV2_new = np.zeros(RV2.shape)       # initialize
+    # ダイポール磁場だからその場の磁場強度でピッチ角出して
+    # 速度ベクトルを振り直したらどう?
+    # sin2_alpha_new = (B1/B0)*math.sin(alphau)**2
+    # vparticle = math.sqrt(2*K0/me) - \
+    #     math.sqrt(Vdvec[0]**2 + Vdvec[1]**2 + Vdvec[2]**2)
+
+    RV2_new = np.zeros(RV2.shape)           # initialize
     RV2_new[0:3] = Rvec_new - R0vec         # 新しいtrace座標系の位置ベクトル
-    RV2_new[3] = - vparallel + Vdpara   # 磁力線に平行な速度成分 向き反転
+    RV2_new[3] = - vparallel + Vdpara       # 磁力線に平行な速度成分 向き反転
+    # 磁力線に平行な速度成分 向き反転(こっちが正しい?)
+    # RV2_new[3] = - vparticle*math.sqrt(1-sin2_alpha_new) + Vdpara
+    # box外に出たときののvparallelと中に戻ってきたときのvparallelは厳密には違う
+    # だからここで発散するんだと思う
 
     return RV2_new
 
@@ -974,7 +1092,7 @@ def rk4_hybrid(Rinitvec, V0vec, V0):
         # 時刻更新
         # t += FORWARD_BACKWARD*dt
         # Europaの近傍を出た
-        if r_eur > (RE+ALTITUDE+(20*gyroradius)):
+        if r_eur > (RE+ALTITUDE+(100*gyroradius)):
             # print('k:', k)
             break
 
@@ -1151,9 +1269,11 @@ class RK4:
 # %% トレースを行うfunction
 @jit(nopython=True, fastmath=True)
 def calc(mcolatr, mlongr, V0):
+    """
     # time.time() はそのままじゃ使えない
     with objmode(start0='f8'):
         start0 = time.perf_counter()
+    """
 
     # result[:, 0] ... 出発点 x座標
     # result[:, 1] ... 出発点 y座標
@@ -1253,9 +1373,11 @@ def calc(mcolatr, mlongr, V0):
         result[i, 9] = vdotn
         i += 1
 
+    """
     if np.random.rand() > 0.85:    # ときどき計算時間を表示する
         with objmode():
             print('A BIN DONE [sec]: ',  (time.perf_counter() - start0))
+    """
 
     return result
 
@@ -1287,7 +1409,7 @@ def main():
         savename = 'gc303_'+date+'_'+str(eV_array[i])+'ev_alp_'+str(alp)+'.txt'
 
         vabs = math.sqrt((eV_array[i]/me)*2*float(1.602E-19))
-        gyroradius = (me*vabs)/(np.abs(e)*Babs(np.array([9.6*RJ, 0, 0])))
+        gyroradius = (me*vabs)/(np.abs(e)*Babs(np.array([L94, 0, 0])))
 
         # 情報表示
         print('V0 [km/s]: {:>2f}'.format(vabs/1000))
