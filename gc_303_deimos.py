@@ -75,7 +75,6 @@ import smtplib
 from email.mime.text import MIMEText
 from email.utils import formatdate
 
-from sympy import E
 # from getpass import getpass
 
 
