@@ -93,6 +93,7 @@ if richtext == 'y':
 #
 #
 # %% TOGGLE
+MOON = 'IO'        # IO, EUROPA, GANYMEDE
 FORWARD_BACKWARD = -1  # 1=FORWARD, -1=BACKWARD
 GYRO = 1               # 0=GUIDING CENTER, 1=GYRO MOTION
 ION_ELECTRON = 1       # 0=ELECTRON, 1=ION
@@ -124,10 +125,19 @@ lam = 10.0        # degrees
 #
 #
 # %% CONSTANTS
-RJ = float(7E+7)        # Jupiter半径   単位: m
-mJ = float(1.90E+27)    # Jupiter質量   単位: kg
-RE = float(1.56E+6)     # Europa半径    単位: m
-mE = float(4.8E+22)     # Europa質量    単位: kg
+RJ = 7E+7               # Jupiter半径   単位: m
+mJ = 1.90E+27           # Jupiter質量   単位: kg
+
+if MOON == 'IO':
+    RE = 1.82E+6        # 衛星半径    単位: m
+    mE = 8.94E+22       # 衛星質量    単位: kg
+    L94 = 5.9*RJ        # 衛星と木星中心の距離 単位: km
+    omgE = 4.1105E-5    # 衛星の公転角速度 単位: rad s^-1
+elif MOON == 'EUROPA':
+    RE = 1.56E+6        # 衛星半径    単位: m
+    mE = 4.8E+22        # 衛星質量    単位: kg
+    L94 = 9.4*RJ        # 衛星と木星中心の距離 単位: km
+    omgE = 2.0478E-5    # 衛星の公転角速度 単位: rad s^-1
 
 c = float(3E+8)         # 真空中光速    単位: m/s
 G = float(6.67E-11)     # 万有引力定数  単位: m^3 kg^-1 s^-2
@@ -139,12 +149,11 @@ if ION_ELECTRON == 1:
     print(me)
 e = Z*float(1.6E-19)    # 電荷      単位: C
 
-mu = float(1.26E-6)     # 真空中透磁率  単位: N A^-2 = kg m s^-2 A^-2
-Mdip = float(1.6E+27)   # Jupiterのダイポールモーメント 単位: A m^2
-omgJ = float(1.74E-4)   # 木星の自転角速度 単位: rad/s
-omgE = float(2.05E-5)   # Europaの公転角速度 単位: rad/s
-omgR = omgJ-omgE        # 木星のEuropaに対する相対的な自転角速度 単位: rad/s
-omgR = omgR*alp
+mu = 1.26E-6            # 真空中透磁率  単位: N A^-2 = kg m s^-2 A^-2
+Mdip = 1.6E+27          # Jupiterのダイポールモーメント 単位: A m^2
+omgJ = 1.75868E-4       # 木星の自転角速度 単位: rad/s
+omgR = omgJ-omgE        # 木星の衛星に対する相対的な自転角速度 単位: rad/s
+omgR = omgR*alp         # 減速した共回転の角速度 単位: rad/s
 eomg = np.array([-np.sin(np.radians(lam)),
                  0., np.cos(np.radians(lam))])
 omgRvec = omgR*eomg
@@ -160,29 +169,22 @@ A2 = (mu*Mdip)/(4*np.pi)         # ダイポール磁場表式内の定数
 A3 = 4*3.1415*me/(mu*Mdip*e)     # ドリフト速度の係数
 
 
-#
-#
-# %% EUROPA POSITION (DETERMINED BY MAGNETIC LATITUDE)
-# lam = 10.0  # =============== !!! ==============
-L96 = 9.6*RJ  # Europa公転軌道 L値
-
-
 # 木星とtrace座標系原点の距離(x軸の定義)
 # Europaの中心を通る磁力線の脚(磁気赤道面)
-R0 = L96
+R0 = L94
 R0x = R0
 R0y = 0
 R0z = 0
 R0vec = np.array([R0x, R0y, R0z])
 
 # 初期条件座標エリアの範囲(木星磁気圏動径方向 最大と最小 phiJ=0で決める)
-r_ip = (L96+1.15*RE)*(math.cos(math.radians(lam)))**(-2)
-r_im = (L96-1.15*RE)*(math.cos(math.radians(lam)))**(-2)
+r_ip = (L94+1.15*RE)*(math.cos(math.radians(lam)))**(-2)
+r_im = (L94-1.15*RE)*(math.cos(math.radians(lam)))**(-2)
 
 # Europaのtrace座標系における位置
-eurx = L96*math.cos(math.radians(lam)) - R0x
+eurx = L94*math.cos(math.radians(lam)) - R0x
 eury = 0 - R0y
-eurz = L96*math.sin(math.radians(lam)) - R0z
+eurz = L94*math.sin(math.radians(lam)) - R0z
 
 # 遠方しきい値(z方向) 磁気緯度で設定
 z_p_rad = math.radians(12.0)      # 北側
@@ -363,7 +365,7 @@ def main():
     tau_s2 = comeback(req, 0, np.sqrt(2*Keq/m_s2), alphaeq)
 
     # 描画
-    ax_bounce(Eeq, tau_s2, tau_s2)
+    ax_bounce(Eeq, tau_e, tau_e)
 
     # 計算時間出力
     print('%.3f sec' % (time.time() - start))
