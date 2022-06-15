@@ -74,7 +74,6 @@ nc_O2 = 1.4E+15         # O2 COLUMN DENSITY [cm-2]
 code = 'gc304'
 date = '20220608e_'+str(MOON)
 
-# これはgc303用
 eV_array = np.array([
     2, 4, 6, 8, 10, 12,
     14, 16, 18, 20,                 # Cross sectionあり
@@ -95,7 +94,6 @@ lat = int(long/2)  # 緯度分割数
 save_yn = 0       # save? y=1, n=0
 
 # 励起断面積(14eVから600eVまで)
-# これはgc303用
 crosssections = np.array([
     0, 0, 0, 0, 0, 0,
     0.0003, 1.68, 2.73, 3.37, 4.11, 4.18, 4.72, 5.74,
@@ -243,7 +241,7 @@ def dataload(filepath):
     gridnum = a0[:, 6]
     energy = a0[:, 7]
     aeq = a0[:, 8]
-    vdotn = a0[:, 9]
+    vdotn = np.abs(a0[:, 9])
 
     return xyz, energy, aeq, vdotn, gridnum
 
@@ -282,20 +280,13 @@ for i in range(len(enlist)):
         j_index = np.where(gridnum0 == j)   # j番目格子点のインデックス
 
         # 速度ベクトル関連
-        vdotn1 = -vdotn0[j_index]     # 速度ベクトルと法線ベクトルの内積 [m/s]
+        vdotn1 = vdotn0[j_index]     # 速度ベクトルと法線ベクトルの内積 [m/s]
         vdotn1_sum = np.sum(vdotn1)  # 内積の和 [m/s]
         vdotn1_sum *= 100            # 内積の和 [cm/s]
 
-        # 立体角関連
-        theta_si = theta_s[j_index]  # 速度ベクトルと法線ベクトルがなす角 [rad]
-        if theta_si.size > 0:  # NOT EMPTY
-            omg_s = 2*np.max(theta_si)   # j番目格子点に入射することが可能な立体角 [rad]
-        else:
-            omg_s = -1
-
         # ピッチ角関連
         fa2 = 1/np.pi       # ピッチ角分布
-        fa2 = np.sin(aeq0[j_index])**0.5
+        # fa2 = np.sin(aeq0[j_index])**0.5
         da = np.pi/pitch    # ピッチ角刻み
 
         # j番目格子点: エネルギー Ei~Ei+dEi [eV] の個数フラックス [cm-2 s-1]
@@ -304,8 +295,25 @@ for i in range(len(enlist)):
         # j番目格子点: エネルギー Ei~Ei+dEi [eV] の電子数密度 [cm-3]
         density_j = np.sum(np.ones(vdotn1.shape)*ne*fv2*fa2*dv*da)
 
-        # j番目格子点: エネルギー Ei~Ei+dEi [eV] のdifferential flux [cm-2 s-1 str-1 eV-1]
-        diff_j = np.sum(vdotn1*ne*fv2*fa2*dv*da/(omg_s*Ei))
+        # 立体角関連
+        theta_si = theta_s[j_index]  # 速度ベクトルと法線ベクトルがなす角 [rad]
+        # j番目格子点に入射することが可能な立体角 [rad]
+        if theta_si.size > 2:  # NOT EMPTY
+            # print(j, theta_si.size)
+            omg_s = 2*np.pi*(-1)*(np.cos(np.max(theta_si)) -
+                                  np.cos(np.min(theta_si)))
+
+            omg_s = 2*np.pi*(-1)*(np.cos(np.max(theta_si)) - 1)
+            # print(np.degrees(np.max(theta_si)))
+            # omg_s = np.sin(theta_si)
+            # omg_s = np.sum(omg_s*da)
+            # omg_s *= (2*np.pi/pitch)*(theta_si.size)
+
+            # j番目格子点: エネルギー Ei~Ei+dEi [eV] のdifferential flux [cm-2 s-1 str-1 eV-1]
+            diff_j = np.sum(vdotn1*ne*fv2*fa2*dv*da/(omg_s*Ei))
+
+        else:
+            diff_j = 0
 
         H1d[j] = diff_j
 
