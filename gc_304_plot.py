@@ -52,20 +52,20 @@ plt.rcParams.update({'font.sans-serif': "Arial",
 #
 #
 # %% TOGGLE
-MOON = 'EUROPA'            # IO, EUROPA, GANYMEDE
-FORWARD_BACKWARD = -1  # 1=FORWARD, -1=BACKWARD
-GYRO = 1               # 0=GUIDING CENTER, 1=GYRO MOTION
-ION_ELECTRON = 0       # 0=ELECTRON, 1=ION
-Z = -1                 # CHARGE (-1 for ELECTRON)
-U = 32                 # ATOMIC MASS (32 for SULFUR)
-kBT1 = 20              # [EUROPA] CENTER TEMPERATURE [eV] 95%
-kBT2 = 300             # [EUROPA] CENTER TEMPERATURE [eV] 5%
-# kBT1 = 5               # [IO] CENTER TEMPERATURE [eV] 95%
-# kBT2 = 5               # [IO] CENTER TEMPERATURE [eV] 5%
-ne = 160               # ELECTRON DENSITY 160 cm-3, S++ DENSITY 20 cm-3
-# ne = 2500              # [IO] ELECTRON DENSITY [cm-3]
-nc_O2 = 1.4E+15        # O2 COLUMN DENSITY [cm-2]
-# nc_O2 = 1.0E+16      # [IO] O2 COLUMN DENSITY [cm-2]
+MOON = 'EUROPA'         # IO, EUROPA, GANYMEDE
+FORWARD_BACKWARD = -1   # 1=FORWARD, -1=BACKWARD
+GYRO = 1                # 0=GUIDING CENTER, 1=GYRO MOTION
+ION_ELECTRON = 0        # 0=ELECTRON, 1=ION
+Z = -1                  # CHARGE (-1 for ELECTRON)
+U = 32                  # ATOMIC MASS (32 for SULFUR)
+kBT1 = 20               # [EUROPA] CENTER TEMPERATURE [eV] 95%
+kBT2 = 300              # [EUROPA] CENTER TEMPERATURE [eV] 5%
+# kBT1 = 5              # [IO] CENTER TEMPERATURE [eV] 95%
+# kBT2 = 5              # [IO] CENTER TEMPERATURE [eV] 5%
+ne = 160                # ELECTRON DENSITY 160 cm-3, S++ DENSITY 20 cm-3
+# ne = 2500             # [IO] ELECTRON DENSITY [cm-3]
+nc_O2 = 1.4E+15         # O2 COLUMN DENSITY [cm-2]
+# nc_O2 = 1.0E+16       # [IO] O2 COLUMN DENSITY [cm-2]
 
 
 #
@@ -186,6 +186,156 @@ R0z = 0
 eurx = L94*math.cos(math.radians(lam)) - R0x
 eury = 0 - R0y
 eurz = L94*math.sin(math.radians(lam)) - R0z
+
+
+#
+#
+# %% マクスウェル速度分布関数
+@jit(nopython=True, fastmath=True)
+def maxwell(en):
+    # en: 電子のエネルギー [eV]
+    v = np.sqrt((en/me)*2*float(1.602E-19))
+
+    # 中心 20eV
+    kBT = kBT1  # eV
+    kBT = kBT*(1.6E-19)  # J
+    fv20 = 4*np.pi*(v**2) * (me/(2*np.pi*kBT))**(1.5) * \
+        np.exp(-(me*v**2)/(2*kBT))
+
+    # 中心 300eV
+    kBT = kBT2  # eV
+    kBT = kBT*(1.6E-19)  # J
+    fv300 = 4*np.pi*(v**2) * (me/(2*np.pi*kBT))**(1.5) * \
+        np.exp(-(me*v**2)/(2*kBT))
+
+    fv = 0.95*fv20 + 0.05*fv300
+
+    return fv
+
+
+#
+#
+# %%
+def dataload(filepath):
+    # 座標&ピッチ角ファイル
+    a0 = np.loadtxt(filepath)
+    # a0[:, 0] ... 出発点 x座標
+    # a0[:, 1] ... 出発点 y座標
+    # a0[:, 2] ... 出発点 z座標
+    # a0[:, 3] ... 終点 x座標
+    # a0[:, 4] ... 終点 y座標
+    # a0[:, 5] ... 終点 z座標
+    # a0[:, 6] ... yn (=gridnum)
+    # a0[:, 7] ... 終点 energy [eV]
+    # a0[:, 8] ... 終点 alpha_eq [RADIANS]
+    # a0[:, 9] ... 出発点 v_dot_n
+
+    # nan除外
+    a0 = a0[np.where(~np.isnan(a0).any(axis=1))]
+
+    if MODE == 'FLUX':
+        # vdotn < 0 のみが適切
+        a0 = a0[np.where(a0[:, 9] < 0)]
+        # print('vdotn: ', a0[:, 9])
+
+    # 表面着地点座標 & ピッチ角 (検索は表面y座標=1列目)
+    xyz = a0[:, 0:3]
+    gridnum = a0[:, 6]
+    energy = a0[:, 7]
+    aeq = a0[:, 8]
+    vdotn = a0[:, 9]
+
+    return xyz, energy, aeq, vdotn, gridnum
+
+
+# ヒストグラム初期化
+H1d = np.zeros(long*lat)
+H2d = np.zeros((lat, long))
+H3d = np.zeros((len(enlist), lat-1, long-1))
+gamma3d = np.zeros((len(enlist), lat-1, long-1))
+
+
+# ヒストグラム積分(v方向)
+for i in range(len(enlist)):
+    # ヒストグラム初期化
+    H2di = np.zeros((lat, long))
+
+    Ei = enlist[i]      # i番目のエネルギー [eV]
+    dEi = devlist[i]    # i番目からi+1番目のエネルギー差 [eV]
+
+    filepath0 = str(code)+'_'+str(date)+'_' + \
+        str(Ei)+'ev_alp_'+str(alp)+'.txt'
+    xyz0, energy0, aeq0, vdotn0, gridnum0 = dataload(filepath0)
+
+    # 速度分布関数
+    fv2 = maxwell(Ei)
+    v1 = np.sqrt((Ei+dEi)*2*(1.6E-19)/me)
+    v2 = np.sqrt((Ei)*2*(1.6E-19)/me)
+    dv = v1 - v2
+
+    # 速度ベクトルと法線ベクトルがなす角(theta_s)
+    theta_s = np.arccos(vdotn0/v1)
+
+    # 表面個数を数えあげ
+    # j番目の格子点で数え上げる
+    for j in range(long*lat):
+        j_index = np.where(gridnum0 == j)   # j番目格子点のインデックス
+
+        # 速度ベクトル関連
+        vdotn1 = -vdotn0[j_index]     # 速度ベクトルと法線ベクトルの内積 [m/s]
+        vdotn1_sum = np.sum(vdotn1)  # 内積の和 [m/s]
+        vdotn1_sum *= 100            # 内積の和 [cm/s]
+
+        # 立体角関連
+        theta_si = theta_s[j_index]  # 速度ベクトルと法線ベクトルがなす角 [rad]
+        if theta_si.size > 0:  # NOT EMPTY
+            omg_s = 2*np.max(theta_si)   # j番目格子点に入射することが可能な立体角 [rad]
+        else:
+            omg_s = -1
+
+        # ピッチ角関連
+        fa2 = 1/np.pi       # ピッチ角分布
+        fa2 = np.sin(aeq0[j_index])**0.5
+        da = np.pi/pitch    # ピッチ角刻み
+
+        # j番目格子点: エネルギー Ei~Ei+dEi [eV] の個数フラックス [cm-2 s-1]
+        num_flux_j = np.sum(vdotn1*ne*fv2*fa2*dv*da)
+
+        # j番目格子点: エネルギー Ei~Ei+dEi [eV] の電子数密度 [cm-3]
+        density_j = np.sum(np.ones(vdotn1.shape)*ne*fv2*fa2*dv*da)
+
+        # j番目格子点: エネルギー Ei~Ei+dEi [eV] のdifferential flux [cm-2 s-1 str-1 eV-1]
+        diff_j = np.sum(vdotn1*ne*fv2*fa2*dv*da/(omg_s*Ei))
+
+        H1d[j] = diff_j
+
+    # 緯度経度マップにreshape
+    H2di = H1d.reshape(lat, long)
+
+    H2d += H2di
+
+# H2dは横軸(経度方向)を正しく入れ替える必要あり
+# 現状 ... 180W -> 90W -> 0W/360W -> 270W -> 180W
+# これを ... 360W -> 270W -> 180W -> 90W -> 0W に直す
+H2d = np.append(H2d[:, int(long/2):], H2d[:, 0:int(long/2)], axis=1)  # 変換した
+
+ns_ratio = np.average(H2d[0:int(lat/2), :]/H2d[int(lat/2):, :])
+print(ns_ratio)
+
+# テストプロット用
+x = np.linspace(0, 360, long+1)
+y = np.linspace(0, 180, lat+1)
+X, Y = np.meshgrid(x, y)
+print(X.shape)
+
+fig, ax = plt.subplots()
+ax.invert_yaxis()
+mappable0 = ax.pcolormesh(X, Y, H2d)
+pp = fig.colorbar(mappable0)
+
+plt.savefig('test_H2d_20220615.png')
+
+plt.show()
 
 
 # ========== UNDER CONSTRUCTION BELOW ==========
